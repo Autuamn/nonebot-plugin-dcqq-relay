@@ -3,7 +3,7 @@ name: Ruff Lint
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "nonebot_plugin_dcqq_relay/**"
   pull_request:
