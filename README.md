@@ -3,9 +3,9 @@
 
 
 ## 前言
-OneBot 实现众多，表现各有不同，我的测试环境为 [Lagrange.Onebot](https://github.com/LagrangeDev/Lagrange.Core)，遇到 bug 请[提 issues](https://github.com/Autuamn/nonebot-plugin-dcqq-relay/issues/new)，务必附上日志。
+OneBot 实现众多，表现各有不同，我的测试环境为 [Lagrange.Onebot](https://github.com/LagrangeDev/Lagrange.Core)，遇到 bug 请[提 issues](https://github.com/Autuamn/nonebot-plugin-dcqq-relay/issues/new)，务必附上日志
 
-本人 python 水平有限，遇到你认为可以改进的方法和函数，或有任何不妥之处，或需要注释支持，也请提出。
+本人 python 水平有限，遇到你认为可以改进的方法和函数，或有任何不妥之处，或需要注释支持，也请提出
 
 ## 功能
 可以在指定的QQ群和 Discord 频道之间同步消息，只支持普通的文字频道，不支持帖子频道
@@ -44,14 +44,6 @@ pip install nonebot-plugin-dcqq-relay
 ```
 
 ## 配置
-> [!TIP]
-> 需要注意的是，本项目的使用[本地数据存储](https://github.com/nonebot/plugin-localstore)存储数据。如需更改目录请在配置文件中加入
-> ```dotenv
-> localstore_cache_dir=""   # 缓存目录
-> localstore_config_dir=""  # 配置目录
-> localstore_data_dir=""    # 数据目录
-> ```
-
 ### dcqq_relay_channel_links
 - 类型：`json`
 - 默认值：`[]`
@@ -61,12 +53,12 @@ pip install nonebot-plugin-dcqq-relay
 ```dotenv
 dcqq_relay_channel_links='[
     {
-        qq_guild_id: 123132,
+        qq_group_id: 123132,
         dc_guild_id: 456456,
-        dc_channel_id: 123123
+        dc_channel_id: 789789
     },
     {
-        qq_guild_id: int    # QQ群号
+        qq_group_id: int    # QQ群号
         dc_guild_id: int    # Discord 服务器 id
         dc_channel_id: int  # Discord 频道 id
                             # 不要把注释放在此处！！
