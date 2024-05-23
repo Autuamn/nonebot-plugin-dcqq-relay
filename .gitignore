@@ -1,0 +1,13 @@
+/*
+
+!/.devcontainer
+!/.github
+!/nonebot_plugin_dcqq_relay
+
+*.pyc
+
+!.gitignore
+!.pre-commit-config.yaml
+!poetry.lock
+!poetry.toml
+!pyproject.toml
