@@ -80,6 +80,8 @@ async def get_dc_member_name(
 
 
 async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
-    async with aiohttp.ClientSession() as session:  # noqa: SIM117
-        async with session.get(url, proxy=proxy) as response:
-            return await response.read()
+    async with (
+        aiohttp.ClientSession() as session,
+        session.get(url, proxy=proxy) as response,
+    ):
+        return await response.read()
