@@ -1,6 +1,4 @@
-from pathlib import Path
 import re
-import sqlite3
 from typing import Optional, Union
 
 import aiohttp
@@ -18,7 +16,7 @@ from nonebot.adapters.onebot.v11 import (
     GroupRecallNoticeEvent,
 )
 
-from .config import Link, plugin_config
+from nonebot_plugin_dcqq_relay.config import Link, plugin_config
 
 channel_links: list[Link] = plugin_config.dcqq_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
@@ -57,17 +55,6 @@ async def check_messages(
             and event.channel_id == link.dc_channel_id
             for link in channel_links
         )
-
-
-async def init_db(dbpath: Path):
-    conn = sqlite3.connect(dbpath)
-    conn.execute(
-        """CREATE TABLE ID (
-            DCID    INT     NOT NULL,
-            QQID    INT     NOT NULL
-        );"""
-    )
-    return conn
 
 
 async def get_dc_member_name(

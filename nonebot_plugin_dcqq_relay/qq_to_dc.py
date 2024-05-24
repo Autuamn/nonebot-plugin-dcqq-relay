@@ -1,6 +1,5 @@
 import asyncio
 import re
-from sqlite3 import Connection
 from typing import Optional
 
 import filetype
@@ -14,9 +13,12 @@ from nonebot.adapters.onebot.v11 import (
     GroupRecallNoticeEvent,
 )
 from nonebot.adapters.onebot.v11.event import Reply
+from nonebot_plugin_orm import get_session
+from sqlalchemy import select
 
 from .config import LinkWithWebhook
 from .qq_emoji_dict import qq_emoji_dict
+from .model import MsgID
 from .utils import get_dc_member_name, get_file_bytes
 
 
@@ -58,7 +60,6 @@ async def build_dc_embeds(
     bot: qq_Bot,
     dc_bot: dc_Bot,
     reply: Reply,
-    conn: Connection,
     channel_link: LinkWithWebhook,
 ) -> list[Embed]:
     """处理 QQ 转 discord 中的回复部分"""
@@ -69,69 +70,73 @@ async def build_dc_embeds(
     author = ""
     timestamp = f"<t:{reply.time}:R>"
 
-    if db_select := conn.execute(
-        f"SELECT DCID FROM ID WHERE QQID LIKE {reply.message_id}"
-    ).fetchone():
-        reference_id = db_select[0]
-        dc_message = await dc_bot.get_channel_message(
-            channel_id=channel_id, message_id=reference_id
-        )
-        if str(reply.sender.user_id) == bot.self_id:
-            name, _ = await get_dc_member_name(dc_bot, guild_id, dc_message.author.id)
-            author = EmbedAuthor(
-                name=name + f"(@{dc_message.author.username})",
-                icon_url=await get_dc_member_avatar(
-                    dc_bot, guild_id, dc_message.author.id
-                ),
+    async with get_session() as session:
+        if reference_id := await session.scalar(
+            select(MsgID.dcid).filter(MsgID.qqid == reply.message_id).fetch(1)
+        ):
+            dc_message = await dc_bot.get_channel_message(
+                channel_id=channel_id, message_id=reference_id
             )
-            timestamp = f"<t:{int(dc_message.timestamp.timestamp())}:R>"
-
-        description = (
-            f"{dc_message.content}\n\n"
-            + timestamp
-            + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
-        )
-    else:
-        plaintext_msg = ""
-        for msg in reply.message:
-            if msg.type == "text":
-                # 文本
-                plaintext_msg += msg.data["text"] or ""
-            elif msg.type == "face":
-                # QQ表情
-                plaintext_msg += (
-                    "["
-                    + qq_emoji_dict.get(
-                        str(msg.data["id"]), "QQemojiID:" + str(msg.data["id"])
-                    )
-                    + "]"
+            if str(reply.sender.user_id) == bot.self_id:
+                name, _ = await get_dc_member_name(
+                    dc_bot, guild_id, dc_message.author.id
                 )
-            elif msg.type == "mface":
-                # 表情商城表情
-                if msg.data["summary"]:
-                    plaintext_msg += msg.data["summary"]
-            elif msg.type == "at":
-                # @人
-                qq = msg.data.get("user_id", None) or msg.data["qq"]
-                if qq in ["0", "all"]:
-                    plaintext_msg += "@全体成员"
-                else:
-                    plaintext_msg += (
-                        "@"
-                        + await get_qq_member_name(bot, channel_link.qq_group_id, qq)
-                        + f"[QQ:{qq}] "
-                    )
-            elif msg.type == "image":
-                # 图片
-                plaintext_msg += "[图片]"
-        description = f"{plaintext_msg}\n\n" + timestamp + "[ ? ]"
+                author = EmbedAuthor(
+                    name=name + f"(@{dc_message.author.username})",
+                    icon_url=await get_dc_member_avatar(
+                        dc_bot, guild_id, dc_message.author.id
+                    ),
+                )
+                timestamp = f"<t:{int(dc_message.timestamp.timestamp())}:R>"
 
-    if not author:
-        author = EmbedAuthor(
-            name=(reply.sender.card or reply.sender.nickname or "")
-            + f"[QQ:{reply.sender.user_id}]",
-            icon_url=f"https://q.qlogo.cn/g?b=qq&nk={reply.sender.user_id}&s=100",
-        )
+            description = (
+                f"{dc_message.content}\n\n"
+                + timestamp
+                + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
+            )
+        else:
+            plaintext_msg = ""
+            for msg in reply.message:
+                if msg.type == "text":
+                    # 文本
+                    plaintext_msg += msg.data["text"] or ""
+                elif msg.type == "face":
+                    # QQ表情
+                    plaintext_msg += (
+                        "["
+                        + qq_emoji_dict.get(
+                            str(msg.data["id"]), "QQemojiID:" + str(msg.data["id"])
+                        )
+                        + "]"
+                    )
+                elif msg.type == "mface":
+                    # 表情商城表情
+                    if msg.data["summary"]:
+                        plaintext_msg += msg.data["summary"]
+                elif msg.type == "at":
+                    # @人
+                    qq = msg.data.get("user_id", None) or msg.data["qq"]
+                    if qq in ["0", "all"]:
+                        plaintext_msg += "@全体成员"
+                    else:
+                        plaintext_msg += (
+                            "@"
+                            + await get_qq_member_name(
+                                bot, channel_link.qq_group_id, qq
+                            )
+                            + f"[QQ:{qq}] "
+                        )
+                elif msg.type == "image":
+                    # 图片
+                    plaintext_msg += "[图片]"
+            description = f"{plaintext_msg}\n\n" + timestamp + "[ ? ]"
+
+        if not author:
+            author = EmbedAuthor(
+                name=(reply.sender.card or reply.sender.nickname or "")
+                + f"[QQ:{reply.sender.user_id}]",
+                icon_url=f"https://q.qlogo.cn/g?b=qq&nk={reply.sender.user_id}&s=100",
+            )
 
     embeds = [
         Embed(
@@ -256,7 +261,6 @@ async def create_qq_to_dc(
     event: GroupMessageEvent,
     dc_bot: dc_Bot,
     channel_links: list[LinkWithWebhook],
-    conn: Connection,
 ):
     """QQ 消息转发到 discord"""
 
@@ -265,7 +269,7 @@ async def create_qq_to_dc(
     link = next(link for link in channel_links if link.qq_group_id == event.group_id)
 
     if reply := event.reply:
-        embeds = await build_dc_embeds(bot, dc_bot, reply, conn, link)
+        embeds = await build_dc_embeds(bot, dc_bot, reply, link)
     else:
         embeds = None
 
@@ -297,16 +301,15 @@ async def create_qq_to_dc(
             await asyncio.sleep(5)
 
     if send:
-        conn.execute(
-            f"INSERT INTO ID (DCID, QQID) VALUES ({send.id}, {event.message_id})"
-        )
+        async with get_session() as session:
+            session.add(MsgID(dcid=send.id, qqid=event.message_id))
+            await session.commit()
 
 
 async def delete_qq_to_dc(
     event: GroupRecallNoticeEvent,
     dc_bot: dc_Bot,
     channel_links: list[LinkWithWebhook],
-    conn: Connection,
     just_delete: list,
 ):
     logger.debug("into delete_qq_to_dc()")
@@ -316,19 +319,22 @@ async def delete_qq_to_dc(
     try_times = 1
     while True:
         try:
-            db_selected = conn.execute(
-                f"SELECT DCID FROM ID WHERE QQID LIKE {event.message_id}"
-            )
-            for msgids in db_selected:
-                for msgid in msgids:
+            async with get_session() as session:
+                if msgids := await session.scalars(
+                    select(MsgID).filter(MsgID.qqid == event.message_id)
+                ):
                     channel_id = next(
                         link.dc_channel_id
                         for link in channel_links
                         if link.qq_group_id == event.group_id
                     )
-                    await dc_bot.delete_message(message_id=msgid, channel_id=channel_id)
-                    just_delete.append(msgid)
-                    conn.execute(f"DELETE FROM ID WHERE DCID={msgid}")
+                    for msgid in msgids:
+                        await dc_bot.delete_message(
+                            message_id=msgid.dcid, channel_id=channel_id
+                        )
+                        just_delete.append(msgid.dcid)
+                        await session.delete(msgid)
+                    await session.commit()
             break
         except UnboundLocalError or TypeError or NameError as e:
             logger.warning(f"delete_qq_to_dc() except Error, retry {try_times}")

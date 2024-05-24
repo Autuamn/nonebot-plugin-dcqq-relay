@@ -1,6 +1,5 @@
 import asyncio
 import re
-from sqlite3 import Connection
 
 from nonebot import logger
 from nonebot.adapters.discord import (
@@ -14,8 +13,11 @@ from nonebot.adapters.onebot.v11 import (
     Message,
     MessageSegment,
 )
+from nonebot_plugin_orm import get_session
+from sqlalchemy import select
 
 from .config import LinkWithWebhook, plugin_config
+from .model import MsgID
 from .utils import get_dc_member_name, get_file_bytes
 
 discord_proxy = plugin_config.discord_proxy
@@ -145,7 +147,6 @@ async def create_dc_to_qq(
     event: MessageCreateEvent,
     qq_bot: qq_Bot,
     channel_links: list[LinkWithWebhook],
-    conn: Connection,
 ):
     """discord 消息转发到 QQ"""
     event.get_message()
@@ -154,18 +155,18 @@ async def create_dc_to_qq(
         link for link in channel_links if link.dc_channel_id == event.channel_id
     )
 
-    if (
-        event.message_reference is not UNSET
-        and (message_id := event.message_reference.message_id)
-        and message_id is not UNSET
-        and (
-            db_select := conn.execute(
-                f"SELECT QQID FROM ID WHERE DCID LIKE {message_id}"
-            ).fetchone()
-        )
-        and (reply_id := db_select[0])
-    ):
-        message += MessageSegment.reply(reply_id)
+    async with get_session() as session:
+        if (
+            event.message_reference is not UNSET
+            and (message_id := event.message_reference.message_id)
+            and message_id is not UNSET
+            and (
+                reply_id := await session.scalar(
+                    select(MsgID.qqid).filter(MsgID.dcid == message_id).fetch(1)
+                )
+            )
+        ):
+            message += MessageSegment.reply(reply_id)
 
     if img_url_list:
         get_img_tasks = [get_file_bytes(url, discord_proxy) for url in img_url_list]
@@ -186,16 +187,14 @@ async def create_dc_to_qq(
             try_times += 1
             await asyncio.sleep(5)
 
-    conn.execute(
-        "INSERT INTO ID (DCID, QQID) VALUES (?, ?)",
-        (event.id, send["message_id"]),
-    )
+    async with get_session() as session:
+        session.add(MsgID(dcid=event.id, qqid=send["message_id"]))
+        await session.commit()
 
 
 async def delete_dc_to_qq(
     event: MessageDeleteEvent,
     qq_bot: qq_Bot,
-    conn: Connection,
     just_delete: list,
 ):
     if (id := event.id) in just_delete:
@@ -204,14 +203,15 @@ async def delete_dc_to_qq(
     try_times = 1
     while True:
         try:
-            db_selected = conn.execute(
-                f"SELECT QQID FROM ID WHERE DCID LIKE {event.id}"
-            )
-            for msgids in db_selected:
-                for msgid in msgids:
-                    await qq_bot.delete_msg(message_id=msgid)
-                    just_delete.append(msgid)
-                    conn.execute(f'DELETE FROM ID WHERE QQID="{msgid}"')
+            async with get_session() as session:
+                if msgids := await session.scalars(
+                    select(MsgID).filter(MsgID.dcid == event.id)
+                ):
+                    for msgid in msgids:
+                        await qq_bot.delete_msg(message_id=msgid.qqid)
+                        just_delete.append(msgid.qqid)
+                        await session.delete(msgid)
+                    await session.commit()
             break
         except UnboundLocalError or TypeError or NameError as e:
             logger.warning(f"retry {try_times}")

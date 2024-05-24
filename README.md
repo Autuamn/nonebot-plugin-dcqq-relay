@@ -71,12 +71,6 @@ dcqq_relay_channel_links='[
 - 默认值：`["/"]`
 - 说明：指明不转发的消息开头
 
-## 命令
-目前只有一条命令：
-- /commit_db
-
-用于保存数据库
-
 ## 特别感谢
 - [nonebot2](https://github.com/nonebot/nonebot2)
 - [Lagrange.Core](https://github.com/LagrangeDev/Lagrange.Core)

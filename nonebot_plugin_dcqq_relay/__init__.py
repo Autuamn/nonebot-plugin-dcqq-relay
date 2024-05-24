@@ -1,10 +1,8 @@
 import asyncio
-import contextlib
 import re
-import sqlite3
 from typing import Union
 
-from nonebot import get_driver, logger, on, on_command, on_regex, require
+from nonebot import get_driver, logger, on, on_command, on_regex
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     MessageCreateEvent,
@@ -17,16 +15,10 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.plugin import PluginMetadata
 
-require("nonebot_plugin_apscheduler")
-from nonebot_plugin_apscheduler import scheduler
-
-require("nonebot_plugin_localstore")
-import nonebot_plugin_localstore as store
-
 from .config import Config, Link, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
 from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
-from .utils import check_messages, init_db
+from .utils import check_messages
 
 __plugin_meta__ = PluginMetadata(
     name="QQ频道-Discord 互通",
@@ -44,10 +36,6 @@ without_webhook_links: list[Link] = plugin_config.dcqq_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
 unmatch_beginning = plugin_config.dcqq_relay_unmatch_beginning
 
-cache_dir = store.get_cache_dir("sync_message_to_discord")
-data_dir = store.get_data_dir("sync_message_to_discord")
-database_file = store.get_data_file("sync_message_to_discord", "msgid.db")
-
 just_delete = []
 
 commit_db_m = on_command("commit_db", priority=0, block=True)
@@ -55,22 +43,6 @@ unmatcher = on_regex(
     rf'\A *?[{re.escape("".join(unmatch_beginning))}].*', priority=1, block=True
 )
 matcher = on(rule=check_messages, priority=2, block=False)
-
-
-@driver.on_startup
-async def connect_db():
-    global conn
-    conn = (
-        (await init_db(database_file))
-        if not database_file.exists()
-        else sqlite3.connect(database_file)
-    )
-
-
-@driver.on_shutdown
-async def close_db():
-    conn.commit()
-    conn.close()
 
 
 @driver.on_bot_connect
@@ -150,15 +122,6 @@ async def get_webhook(bot: dc_Bot):
                 )
 
 
-@scheduler.scheduled_job("cron", minute="*/30", id="commit_db")
-@commit_db_m.handle()
-async def commit_db():
-    await close_db()
-    await connect_db()
-    with contextlib.suppress(LookupError):
-        await commit_db_m.finish("commit!")
-
-
 @unmatcher.handle()
 async def unmatcher_pass():
     pass
@@ -174,9 +137,9 @@ async def create_message(
     while True:
         try:
             if isinstance(bot, qq_Bot) and isinstance(event, GroupMessageEvent):
-                await create_qq_to_dc(bot, event, dc_bot, with_webhook_links, conn)
+                await create_qq_to_dc(bot, event, dc_bot, with_webhook_links)
             elif isinstance(bot, dc_Bot) and isinstance(event, MessageCreateEvent):
-                await create_dc_to_qq(bot, event, qq_bot, with_webhook_links, conn)
+                await create_dc_to_qq(bot, event, qq_bot, with_webhook_links)
             else:
                 logger.error("bot type and event type not match")
             break
@@ -198,11 +161,9 @@ async def delete_message(
     while True:
         try:
             if isinstance(bot, qq_Bot) and isinstance(event, GroupRecallNoticeEvent):
-                await delete_qq_to_dc(
-                    event, dc_bot, with_webhook_links, conn, just_delete
-                )
+                await delete_qq_to_dc(event, dc_bot, with_webhook_links, just_delete)
             elif isinstance(bot, dc_Bot) and isinstance(event, MessageDeleteEvent):
-                await delete_dc_to_qq(event, qq_bot, conn, just_delete)
+                await delete_dc_to_qq(event, qq_bot, just_delete)
             else:
                 logger.error("bot type and event type not match")
             break
