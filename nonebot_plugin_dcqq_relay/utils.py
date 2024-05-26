@@ -8,7 +8,7 @@ from nonebot.adapters.discord import (
     MessageCreateEvent,
     MessageDeleteEvent,
 )
-from nonebot.adapters.discord.api import UNSET, Missing
+from nonebot.adapters.discord.api import UNSET, Missing, Webhook
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
@@ -16,7 +16,8 @@ from nonebot.adapters.onebot.v11 import (
     GroupRecallNoticeEvent,
 )
 
-from nonebot_plugin_dcqq_relay.config import Link, plugin_config
+from .config import Link, LinkWithWebhook, plugin_config
+
 
 channel_links: list[Link] = plugin_config.dcqq_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
@@ -85,3 +86,44 @@ async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
         session.get(url, proxy=proxy) as response,
     ):
         return await response.read()
+
+
+async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
+    try:
+        channel_webhooks = await bot.get_channel_webhooks(channel_id=link.dc_channel_id)
+        bot_webhook = next(
+            (
+                webhook
+                for webhook in channel_webhooks
+                if webhook.application_id == int(bot.self_id)
+            ),
+            None,
+        )
+        if bot_webhook:
+            return await build_link(link, bot_webhook)
+    except Exception as e:
+        logger.error(
+            f"get webhook error, Discord channel id: {link.dc_channel_id}, error: {e}"
+        )
+    try:
+        create_webhook = await bot.create_webhook(
+            channel_id=link.dc_channel_id, name=str(link.dc_channel_id)
+        )
+        return await build_link(link, create_webhook)
+    except Exception as e:
+        logger.error(
+            f"create webhook error, Discord channel id: {link.dc_channel_id}, "
+            + f"error: {e}"
+        )
+    logger.error(
+        f"failed to get or create webhook, Discord channel id: {link.dc_channel_id}"
+    )
+
+
+async def build_link(link: Link, webhook: Webhook) -> Optional[LinkWithWebhook]:
+    if webhook and webhook.token:
+        return LinkWithWebhook(
+            webhook_id=webhook.id,
+            webhook_token=webhook.token,
+            **link.model_dump(exclude_none=True),
+        )

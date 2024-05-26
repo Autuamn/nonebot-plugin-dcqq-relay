@@ -316,6 +316,11 @@ async def delete_qq_to_dc(
     if (id := event.message_id) in just_delete:
         just_delete.remove(id)
         return
+    channel_id = next(
+        link.dc_channel_id
+        for link in channel_links
+        if link.qq_group_id == event.group_id
+    )
     try_times = 1
     while True:
         try:
@@ -323,11 +328,6 @@ async def delete_qq_to_dc(
                 if msgids := await session.scalars(
                     select(MsgID).filter(MsgID.qqid == event.message_id)
                 ):
-                    channel_id = next(
-                        link.dc_channel_id
-                        for link in channel_links
-                        if link.qq_group_id == event.group_id
-                    )
                     for msgid in msgids:
                         await dc_bot.delete_message(
                             message_id=msgid.dcid, channel_id=channel_id
