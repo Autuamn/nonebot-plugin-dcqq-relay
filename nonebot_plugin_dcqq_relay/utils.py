@@ -8,7 +8,7 @@ from nonebot.adapters.discord import (
     MessageCreateEvent,
     MessageDeleteEvent,
 )
-from nonebot.adapters.discord.api import UNSET, Missing, Webhook
+from nonebot.adapters.discord.api import UNSET, Missing
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
@@ -16,10 +16,10 @@ from nonebot.adapters.onebot.v11 import (
     GroupRecallNoticeEvent,
 )
 
-from .config import Link, LinkWithWebhook, plugin_config
+from .config import LinkWithoutWebhook, LinkWithWebhook, plugin_config
 
 
-channel_links: list[Link] = plugin_config.dcqq_relay_channel_links
+channel_links: list[LinkWithoutWebhook] = plugin_config.dcqq_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
 
 
@@ -88,7 +88,11 @@ async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
         return await response.read()
 
 
-async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
+async def get_webhook(
+    bot: dc_Bot, link: LinkWithoutWebhook
+) -> Optional[LinkWithWebhook]:
+    if link.webhook_id and link.webhook_token:
+        return LinkWithWebhook(**link.model_dump())
     try:
         channel_webhooks = await bot.get_channel_webhooks(channel_id=link.dc_channel_id)
         bot_webhook = next(
@@ -99,8 +103,8 @@ async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
             ),
             None,
         )
-        if bot_webhook:
-            return await build_link(link, bot_webhook)
+        if bot_webhook and bot_webhook.token:
+            return await build_link(link, bot_webhook.id, bot_webhook.token)
     except Exception as e:
         logger.error(
             f"get webhook error, Discord channel id: {link.dc_channel_id}, error: {e}"
@@ -109,7 +113,8 @@ async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
         create_webhook = await bot.create_webhook(
             channel_id=link.dc_channel_id, name=str(link.dc_channel_id)
         )
-        return await build_link(link, create_webhook)
+        if create_webhook.token:
+            return await build_link(link, create_webhook.id, create_webhook.token)
     except Exception as e:
         logger.error(
             f"create webhook error, Discord channel id: {link.dc_channel_id}, "
@@ -120,10 +125,11 @@ async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
     )
 
 
-async def build_link(link: Link, webhook: Webhook) -> Optional[LinkWithWebhook]:
-    if webhook and webhook.token:
-        return LinkWithWebhook(
-            webhook_id=webhook.id,
-            webhook_token=webhook.token,
-            **link.model_dump(exclude_none=True),
-        )
+async def build_link(
+    link: LinkWithoutWebhook, webhook_id: int, webhook_token: str
+) -> Optional[LinkWithWebhook]:
+    return LinkWithWebhook(
+        webhook_id=webhook_id,
+        webhook_token=webhook_token,
+        **link.model_dump(exclude={"webhook_id", "webhook_token"}),
+    )
