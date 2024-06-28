@@ -22,8 +22,8 @@ from .utils import check_messages, get_webhook
 
 
 __plugin_meta__ = PluginMetadata(
-    name="QQ频道-Discord 互通",
-    description="在QQ频道与 Discord 之间同步消息的 nonebot2 插件",
+    name="QQ群-Discord 互通",
+    description="在QQ群与 Discord 之间同步消息的 nonebot2 插件",
     usage="",
     type="application",
     homepage="https://github.com/Autuamn/nonebot-plugin-dcqq-relay",
