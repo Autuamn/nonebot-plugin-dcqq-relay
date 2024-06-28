@@ -90,7 +90,7 @@ async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
 
 async def get_webhook(
     bot: dc_Bot, link: LinkWithoutWebhook
-) -> Optional[LinkWithWebhook]:
+) -> Union[LinkWithWebhook, int]:
     if link.webhook_id and link.webhook_token:
         return LinkWithWebhook(**link.model_dump())
     try:
@@ -123,11 +123,12 @@ async def get_webhook(
     logger.error(
         f"failed to get or create webhook, Discord channel id: {link.dc_channel_id}"
     )
+    return link.dc_channel_id
 
 
 async def build_link(
     link: LinkWithoutWebhook, webhook_id: int, webhook_token: str
-) -> Optional[LinkWithWebhook]:
+) -> LinkWithWebhook:
     return LinkWithWebhook(
         webhook_id=webhook_id,
         webhook_token=webhook_token,

@@ -137,7 +137,6 @@ async def build_qq_message(
                 r"image/(gif|jpeg|png|webp)", attachment.content_type, 0
             ):
                 img_url_list.append(attachment.url)
-        logger.debug(img_url_list)
 
     return qq_message, img_url_list
 
@@ -149,6 +148,7 @@ async def create_dc_to_qq(
     channel_links: list[LinkWithWebhook],
 ):
     """discord 消息转发到 QQ"""
+    logger.debug("into create_dc_to_qq()")
     event.get_message()
     message, img_url_list = await build_qq_message(bot, event)
     link = next(
@@ -181,7 +181,7 @@ async def create_dc_to_qq(
             )
             break
         except NameError as e:
-            logger.warning(f"retry {try_times}")
+            logger.warning(f"create_dc_to_qq() error: {e}, retry {try_times}")
             if try_times >= 3:
                 raise e
             try_times += 1
@@ -190,6 +190,7 @@ async def create_dc_to_qq(
     async with get_session() as session:
         session.add(MsgID(dcid=event.id, qqid=send["message_id"]))
         await session.commit()
+    logger.debug("finish create_dc_to_qq()")
 
 
 async def delete_dc_to_qq(
@@ -197,6 +198,7 @@ async def delete_dc_to_qq(
     qq_bot: qq_Bot,
     just_delete: list,
 ):
+    logger.debug("into delete_dc_to_qq()")
     if (id := event.id) in just_delete:
         just_delete.remove(id)
         return
@@ -212,9 +214,10 @@ async def delete_dc_to_qq(
                         just_delete.append(msgid.qqid)
                         await session.delete(msgid)
                     await session.commit()
+            logger.debug("finish delete_dc_to_qq()")
             break
         except UnboundLocalError or TypeError or NameError as e:
-            logger.warning(f"retry {try_times}")
+            logger.warning(f"delete_dc_to_qq() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1

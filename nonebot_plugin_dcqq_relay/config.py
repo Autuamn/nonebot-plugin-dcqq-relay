@@ -22,7 +22,7 @@ class LinkWithWebhook(Link):
 
 class Config(BaseModel):
     dcqq_relay_channel_links: list[LinkWithoutWebhook] = []
-    """子频道绑定"""
+    """QQ群绑定"""
     dcqq_relay_unmatch_beginning: list[str] = ["/"]
     """不转发的消息开头"""
     discord_proxy: Optional[str] = None

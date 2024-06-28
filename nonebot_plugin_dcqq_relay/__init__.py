@@ -60,10 +60,18 @@ async def get_qq_bot(bot: qq_Bot):
 
 @driver.on_bot_connect
 async def get_webhooks(bot: dc_Bot):
+    logger.info("prepare webhooks: start")
     global with_webhook_links
     task = [get_webhook(bot, link) for link in without_webhook_links]
-    webhooks = await asyncio.gather(*task)
-    with_webhook_links.extend(link for link in webhooks if link)
+    links = await asyncio.gather(*task)
+    with_webhook_links.extend(
+        link for link in links if isinstance(link, LinkWithWebhook)
+    )
+    logger.info("prepare webhooks: done")
+    if failed := [link for link in links if isinstance(link, int)]:
+        logger.error(
+            f"{len(failed)} channels failed to get or create webhook: {failed}"
+        )
 
 
 @unmatcher.handle()
@@ -85,10 +93,13 @@ async def create_message(
             elif isinstance(bot, dc_Bot) and isinstance(event, MessageCreateEvent):
                 await create_dc_to_qq(bot, event, qq_bot, with_webhook_links)
             else:
-                logger.error("bot type and event type not match")
+                logger.error(
+                    "bot type and event type not match: "
+                    + f"bot - {bot.type}, event - {type(event)}"
+                )
             break
         except NameError as e:
-            logger.warning(f"create_message() except NameError, retry {try_times}")
+            logger.warning(f"create_message() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
@@ -109,10 +120,13 @@ async def delete_message(
             elif isinstance(bot, dc_Bot) and isinstance(event, MessageDeleteEvent):
                 await delete_dc_to_qq(event, qq_bot, just_delete)
             else:
-                logger.error("bot type and event type not match")
+                logger.error(
+                    "bot type and event type not match: "
+                    + f"bot - {bot.type}, event - {type(event)}"
+                )
             break
         except NameError as e:
-            logger.warning(f"delete_message() except NameError, retry {try_times}")
+            logger.warning(f"delete_message() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1

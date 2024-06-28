@@ -63,8 +63,6 @@ async def build_dc_embeds(
     channel_link: LinkWithWebhook,
 ) -> list[Embed]:
     """处理 QQ 转 discord 中的回复部分"""
-
-    logger.debug("into build_dc_embeds()")
     guild_id, channel_id = channel_link.dc_guild_id, channel_link.dc_channel_id
 
     author = ""
@@ -151,8 +149,6 @@ async def build_dc_message(
     bot: qq_Bot, event: GroupMessageEvent
 ) -> tuple[str, list[str], list[str]]:
     """获取 QQ 消息，用于发送到 discord"""
-
-    logger.debug("into build_dc_message()")
     text = ""
     file_list: list[str] = []
     url_list: list[str] = []
@@ -221,8 +217,6 @@ async def send_to_discord(
     avatar_url: Optional[str],
 ) -> MessageGet:
     """用 webhook 发送到 discord"""
-
-    logger.debug("into send_to_discord()")
     if img_files and img_urls:
         get_img_tasks = [
             build_dc_file(file, url) for file, url in zip(img_files, img_urls)
@@ -246,13 +240,11 @@ async def send_to_discord(
             )
             break
         except NetworkError as e:
-            logger.warning(f"send_to_discord() except NetworkError, retry {try_times}")
+            logger.warning(f"send_to_discord() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
             await asyncio.sleep(5)
-
-    logger.debug("send")
     return send
 
 
@@ -294,7 +286,7 @@ async def create_qq_to_dc(
             )
             break
         except NameError as e:
-            logger.warning(f"create_qq_to_dc() except NameError, retry {try_times}")
+            logger.warning(f"create_qq_to_dc() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
@@ -304,6 +296,7 @@ async def create_qq_to_dc(
         async with get_session() as session:
             session.add(MsgID(dcid=send.id, qqid=event.message_id))
             await session.commit()
+    logger.debug("finish create_qq_to_dc()")
 
 
 async def delete_qq_to_dc(
@@ -335,9 +328,10 @@ async def delete_qq_to_dc(
                         just_delete.append(msgid.dcid)
                         await session.delete(msgid)
                     await session.commit()
+            logger.debug("finish delete_qq_to_dc()")
             break
         except UnboundLocalError or TypeError or NameError as e:
-            logger.warning(f"delete_qq_to_dc() except Error, retry {try_times}")
+            logger.warning(f"delete_qq_to_dc() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
