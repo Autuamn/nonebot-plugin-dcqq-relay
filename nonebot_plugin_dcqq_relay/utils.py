@@ -3,6 +3,7 @@ from typing import Optional, Union
 
 import aiohttp
 from nonebot import logger
+from nonebot.compat import model_dump
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     MessageCreateEvent,
@@ -38,7 +39,7 @@ async def check_messages(
         return any(event.group_id == link.qq_group_id for link in channel_links)
     elif isinstance(event, MessageCreateEvent):
         if not (
-            re.match(r".*? \[QQ:\d*?\]$", event.author.username)
+            re.match(r".*?\[QQ:\d*?\]$", event.author.username)
             and event.author.bot is True
         ):
             return any(
@@ -92,7 +93,7 @@ async def get_webhook(
     bot: dc_Bot, link: LinkWithoutWebhook
 ) -> Union[LinkWithWebhook, int]:
     if link.webhook_id and link.webhook_token:
-        return LinkWithWebhook(**link.model_dump())
+        return LinkWithWebhook(**model_dump(link))
     try:
         channel_webhooks = await bot.get_channel_webhooks(channel_id=link.dc_channel_id)
         bot_webhook = next(
@@ -132,5 +133,5 @@ async def build_link(
     return LinkWithWebhook(
         webhook_id=webhook_id,
         webhook_token=webhook_token,
-        **link.model_dump(exclude={"webhook_id", "webhook_token"}),
+        **model_dump(link, exclude={"webhook_id", "webhook_token"}),
     )
