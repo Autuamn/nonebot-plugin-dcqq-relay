@@ -45,7 +45,7 @@ pip install nonebot-plugin-dcqq-relay
 
 ### 安装开发中版本
 ```bash
-pip install git+https://github.com/Autuamn/nonebot-plugin-dcqg-relay.git@main
+pip install git+https://github.com/Autuamn/nonebot-plugin-dcqq-relay.git@main
 ```
 
 ## 配置
