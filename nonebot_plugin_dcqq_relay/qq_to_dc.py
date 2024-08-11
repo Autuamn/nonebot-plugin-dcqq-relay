@@ -11,6 +11,7 @@ from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
     GroupMessageEvent,
     GroupRecallNoticeEvent,
+    Message,
 )
 from nonebot.adapters.onebot.v11.event import Reply
 from nonebot_plugin_orm import get_session
@@ -60,17 +61,17 @@ async def build_dc_embeds(
     bot: qq_Bot,
     dc_bot: dc_Bot,
     reply: Reply,
-    channel_link: LinkWithWebhook,
+    link: LinkWithWebhook,
 ) -> list[Embed]:
     """处理 QQ 转 discord 中的回复部分"""
-    guild_id, channel_id = channel_link.dc_guild_id, channel_link.dc_channel_id
+    guild_id, channel_id = link.dc_guild_id, link.dc_channel_id
 
     author = ""
     timestamp = f"<t:{reply.time}:R>"
 
     async with get_session() as session:
         if reference_id := await session.scalar(
-            select(MsgID.dcid).filter(MsgID.qqid == reply.message_id).fetch(1)
+            select(MsgID.dcid).filter(MsgID.qqid == reply.message_id).limit(1)
         ):
             dc_message = await dc_bot.get_channel_message(
                 channel_id=channel_id, message_id=reference_id
@@ -93,40 +94,7 @@ async def build_dc_embeds(
                 + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
             )
         else:
-            plaintext_msg = ""
-            for msg in reply.message:
-                if msg.type == "text":
-                    # 文本
-                    plaintext_msg += msg.data["text"] or ""
-                elif msg.type == "face":
-                    # QQ表情
-                    plaintext_msg += (
-                        "["
-                        + qq_emoji_dict.get(
-                            str(msg.data["id"]), "QQemojiID:" + str(msg.data["id"])
-                        )
-                        + "]"
-                    )
-                elif msg.type == "mface":
-                    # 表情商城表情
-                    if msg.data["summary"]:
-                        plaintext_msg += msg.data["summary"]
-                elif msg.type == "at":
-                    # @人
-                    qq = msg.data.get("user_id", None) or msg.data["qq"]
-                    if qq in ["0", "all"]:
-                        plaintext_msg += "@全体成员"
-                    else:
-                        plaintext_msg += (
-                            "@"
-                            + await get_qq_member_name(
-                                bot, channel_link.qq_group_id, qq
-                            )
-                            + f"[QQ:{qq}] "
-                        )
-                elif msg.type == "image":
-                    # 图片
-                    plaintext_msg += "[图片]"
+            plaintext_msg = (await build_dc_message(bot, reply.message, link, True))[0]
             description = f"{plaintext_msg}\n\n" + timestamp + "[ ? ]"
 
         if not author:
@@ -146,13 +114,16 @@ async def build_dc_embeds(
 
 
 async def build_dc_message(
-    bot: qq_Bot, event: GroupMessageEvent
+    bot: qq_Bot,
+    message: Message,
+    link: LinkWithWebhook,
+    reply_mode: bool = False,
 ) -> tuple[str, list[str], list[str]]:
     """获取 QQ 消息，用于发送到 discord"""
     text = ""
     file_list: list[str] = []
     url_list: list[str] = []
-    for msg in event.message:
+    for msg in message:
         if msg.type == "text":
             # 文本
             text += (
@@ -172,17 +143,18 @@ async def build_dc_message(
         elif msg.type == "mface":
             # 表情商城表情
             if msg.data["summary"] and msg.data["url"]:
-                text += msg.data["summary"]
+                text += msg.data["summary"] if text or reply_mode else ""
                 file_list.append(msg.data["summary"] + ".gif")
                 url_list.append(msg.data["url"])
             else:
-                text += "[图片]"
+                text += "[动画表情]" if text or reply_mode else ""
                 file_list.append(msg.data["id"] + ".gif")
                 url_list.append(
                     f"https://gxh.vip.qq.com/club/item/parcel/item/{msg.data['id'][:2]}/{msg.data['id']}/raw300.gif"
                 )
         elif msg.type == "marketface":
             # 表情商城表情
+            text += msg.data["summary"] if text or reply_mode else ""
             file_list.append(msg.data["summary"] + ".gif")
             url_list.append(
                 f"https://gxh.vip.qq.com/club/item/parcel/item/{msg.data['face_id'][:2]}/{msg.data['face_id']}/raw300.gif"
@@ -194,12 +166,12 @@ async def build_dc_message(
                 text += "@everyone"
             else:
                 text += (
-                    f"@{await get_qq_member_name(bot, event.group_id, qq)}"
+                    f"@{await get_qq_member_name(bot, link.qq_group_id, qq)}"
                     + f"[QQ:{qq}] "
                 )
         elif msg.type == "image":
             # 图片
-            text += "[图片]"
+            text += "[图片]" if text or reply_mode else ""
             file_list.append(msg.data["file"])
             url_list.append(msg.data["url"].replace("https://", "http://"))
     return text, file_list, url_list
@@ -257,8 +229,8 @@ async def create_qq_to_dc(
     """QQ 消息转发到 discord"""
 
     logger.debug("into create_qq_to_dc()")
-    text, img_files, img_urls = await build_dc_message(bot, event)
     link = next(link for link in channel_links if link.qq_group_id == event.group_id)
+    text, img_files, img_urls = await build_dc_message(bot, event.message, link)
 
     if reply := event.reply:
         embeds = await build_dc_embeds(bot, dc_bot, reply, link)

@@ -2,7 +2,7 @@ import asyncio
 import re
 from typing import Union
 
-from nonebot import get_driver, logger, on, on_regex
+from nonebot import get_driver, logger, on, on_regex, require
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     MessageCreateEvent,
@@ -14,6 +14,8 @@ from nonebot.adapters.onebot.v11 import (
     GroupRecallNoticeEvent,
 )
 from nonebot.plugin import PluginMetadata
+
+require("nonebot_plugin_orm")
 
 from .config import Config, LinkWithoutWebhook, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq

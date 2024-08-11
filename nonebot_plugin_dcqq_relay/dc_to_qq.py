@@ -157,12 +157,13 @@ async def create_dc_to_qq(
 
     async with get_session() as session:
         if (
-            event.message_reference is not UNSET
-            and (message_id := event.message_reference.message_id)
-            and message_id is not UNSET
+            event.referenced_message is not UNSET
+            and event.referenced_message is not None
             and (
                 reply_id := await session.scalar(
-                    select(MsgID.qqid).filter(MsgID.dcid == message_id).fetch(1)
+                    select(MsgID.qqid)
+                    .filter(MsgID.dcid == event.referenced_message.id)
+                    .limit(1)
                 )
             )
         ):
