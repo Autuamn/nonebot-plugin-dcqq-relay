@@ -1,8 +1,8 @@
 import asyncio
-import re
 from typing import Union
 
-from nonebot import get_driver, logger, on, on_regex, require
+from nonebot import get_driver, logger, on, require
+from nonebot.adapters import Event
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     MessageCreateEvent,
@@ -14,6 +14,8 @@ from nonebot.adapters.onebot.v11 import (
     GroupRecallNoticeEvent,
 )
 from nonebot.plugin import PluginMetadata
+from nonebot.rule import Rule, StartswithRule
+from nonebot.typing import T_State
 
 require("nonebot_plugin_orm")
 
@@ -21,7 +23,6 @@ from .config import Config, LinkWithoutWebhook, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
 from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
 from .utils import check_messages, get_webhook
-
 
 __plugin_meta__ = PluginMetadata(
     name="QQ群-Discord 互通",
@@ -42,10 +43,16 @@ unmatch_beginning = plugin_config.dcqq_relay_unmatch_beginning
 
 just_delete = []
 
-unmatcher = on_regex(
-    rf'\A *?[{re.escape("".join(unmatch_beginning))}].*', priority=1, block=True
+
+class NotStartswithRule(StartswithRule):
+    async def __call__(self, event: Event, state: T_State) -> bool:
+        return not super().__call__(event, state)
+
+
+matcher = on(
+    rule=Rule(NotStartswithRule(tuple(unmatch_beginning))) & check_messages,
+    priority=2,
 )
-matcher = on(rule=check_messages, priority=2, block=False)
 
 
 @driver.on_bot_connect
@@ -74,11 +81,6 @@ async def get_webhooks(bot: dc_Bot):
         logger.error(
             f"{len(failed)} channels failed to get or create webhook: {failed}"
         )
-
-
-@unmatcher.handle()
-async def unmatcher_pass():
-    pass
 
 
 @matcher.handle()
