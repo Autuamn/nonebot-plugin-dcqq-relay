@@ -50,10 +50,12 @@ class NotStartswithRule(StartswithRule):
 
 
 matcher = on(
-    rule=Rule(NotStartswithRule(tuple(unmatch_beginning)))
-    & Rule(check_messages, check_to_me)
-    if plugin_config.dcqq_relay_only_to_me
-    else Rule(check_messages),
+    rule=(
+        Rule(NotStartswithRule(tuple(unmatch_beginning)))
+        & Rule(check_messages, check_to_me)
+        if plugin_config.dcqq_relay_only_to_me
+        else Rule(check_messages)
+    ),
     priority=2,
 )
 
