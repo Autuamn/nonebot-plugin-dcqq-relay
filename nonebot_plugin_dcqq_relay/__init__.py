@@ -46,7 +46,7 @@ just_delete = []
 
 class NotStartswithRule(StartswithRule):
     async def __call__(self, event: Event, state: T_State) -> bool:
-        return not super().__call__(event, state)
+        return not await super().__call__(event, state)
 
 
 matcher = on(
