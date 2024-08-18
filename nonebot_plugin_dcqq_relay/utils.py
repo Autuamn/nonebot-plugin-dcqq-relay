@@ -3,7 +3,6 @@ from typing import Optional, Union
 
 import aiohttp
 from nonebot import logger
-from nonebot.compat import model_dump
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     MessageCreateEvent,
@@ -12,20 +11,18 @@ from nonebot.adapters.discord import (
 from nonebot.adapters.discord.api import UNSET, Missing
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
-    Bot as qq_Bot,
     GroupMessageEvent,
     GroupRecallNoticeEvent,
 )
+from nonebot.compat import model_dump
 
 from .config import LinkWithoutWebhook, LinkWithWebhook, plugin_config
-
 
 channel_links: list[LinkWithoutWebhook] = plugin_config.dcqq_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
 
 
 async def check_messages(
-    bot: Union[qq_Bot, dc_Bot],
     event: Union[
         GroupMessageEvent,
         MessageCreateEvent,
@@ -57,6 +54,19 @@ async def check_messages(
             and event.channel_id == link.dc_channel_id
             for link in channel_links
         )
+
+
+async def check_to_me(
+    event: Union[
+        GroupMessageEvent,
+        MessageCreateEvent,
+        GroupRecallNoticeEvent,
+        MessageDeleteEvent,
+    ],
+) -> bool:
+    if isinstance(event, (GroupMessageEvent, MessageCreateEvent)):
+        return event.to_me
+    return True
 
 
 async def get_dc_member_name(
