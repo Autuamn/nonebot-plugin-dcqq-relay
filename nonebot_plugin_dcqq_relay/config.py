@@ -25,6 +25,7 @@ class Config(BaseModel):
     """QQ群绑定"""
     dcqq_relay_unmatch_beginning: list[str] = ["/"]
     """不转发的消息开头"""
+    dcqq_relay_only_to_me: bool = False
     discord_proxy: Optional[str] = None
 
 

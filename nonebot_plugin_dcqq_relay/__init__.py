@@ -22,7 +22,7 @@ require("nonebot_plugin_orm")
 from .config import Config, LinkWithoutWebhook, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
 from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
-from .utils import check_messages, get_webhook
+from .utils import check_messages, check_to_me, get_webhook
 
 __plugin_meta__ = PluginMetadata(
     name="QQ群-Discord 互通",
@@ -50,7 +50,11 @@ class NotStartswithRule(StartswithRule):
 
 
 matcher = on(
-    rule=Rule(NotStartswithRule(tuple(unmatch_beginning))) & check_messages,
+    rule=(
+        Rule(NotStartswithRule(tuple(unmatch_beginning)))
+        & check_messages
+        & (check_to_me if plugin_config.dcqq_relay_only_to_me else None)
+    ),
     priority=2,
 )
 
