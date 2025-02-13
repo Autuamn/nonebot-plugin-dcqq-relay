@@ -62,7 +62,7 @@ async def build_dc_embeds(
     dc_bot: dc_Bot,
     reply: Reply,
     link: LinkWithWebhook,
-) -> list[Embed]:
+) -> Embed:
     """处理 QQ 转 discord 中的回复部分"""
     guild_id, channel_id = link.dc_guild_id, link.dc_channel_id
 
@@ -70,13 +70,14 @@ async def build_dc_embeds(
     timestamp = f"<t:{reply.time}:R>"
 
     async with get_session() as session:
+        plaintext_msg = (await build_dc_message(bot, reply.message, link, True))[0]
         if reference_id := await session.scalar(
             select(MsgID.dcid).filter(MsgID.qqid == reply.message_id).limit(1)
         ):
-            dc_message = await dc_bot.get_channel_message(
-                channel_id=channel_id, message_id=reference_id
-            )
             if str(reply.sender.user_id) == bot.self_id:
+                dc_message = await dc_bot.get_channel_message(
+                    channel_id=channel_id, message_id=reference_id
+                )
                 name, _ = await get_dc_member_name(
                     dc_bot, guild_id, dc_message.author.id
                 )
@@ -86,15 +87,15 @@ async def build_dc_embeds(
                         dc_bot, guild_id, dc_message.author.id
                     ),
                 )
+                plaintext_msg = dc_message.content
                 timestamp = f"<t:{int(dc_message.timestamp.timestamp())}:R>"
 
             description = (
-                f"{dc_message.content}\n\n"
+                f"{plaintext_msg}\n\n"
                 + timestamp
                 + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
             )
         else:
-            plaintext_msg = (await build_dc_message(bot, reply.message, link, True))[0]
             description = f"{plaintext_msg}\n\n" + timestamp + "[ ? ]"
 
         if not author:
@@ -104,13 +105,11 @@ async def build_dc_embeds(
                 icon_url=f"https://q.qlogo.cn/g?b=qq&nk={reply.sender.user_id}&s=100",
             )
 
-    embeds = [
-        Embed(
-            author=author,
-            description=description,
-        )
-    ]
-    return embeds
+    embed = Embed(
+        author=author,
+        description=description,
+    )
+    return embed
 
 
 async def build_dc_message(
@@ -118,11 +117,12 @@ async def build_dc_message(
     message: Message,
     link: LinkWithWebhook,
     reply_mode: bool = False,
-) -> tuple[str, list[str], list[str]]:
+) -> tuple[str, list[str], list[str], list[Embed]]:
     """获取 QQ 消息，用于发送到 discord"""
     text = ""
     file_list: list[str] = []
     url_list: list[str] = []
+    embeds: list[Embed] = []
     for msg in message:
         if msg.type == "text":
             # 文本
@@ -162,19 +162,64 @@ async def build_dc_message(
         elif msg.type == "at":
             # @人
             qq = msg.data.get("user_id", None) or msg.data["qq"]
+            name = msg.data.get("name", None)
             if qq in ["0", "all"]:
                 text += "@everyone"
             else:
                 text += (
-                    f"@{await get_qq_member_name(bot, link.qq_group_id, qq)}"
-                    + f"[QQ:{qq}] "
-                )
+                    name or f"@{await get_qq_member_name(bot, link.qq_group_id, qq)}"
+                ) + f"[QQ:{qq}] "
         elif msg.type == "image":
             # 图片
             text += "[图片]" if text or reply_mode else ""
-            file_list.append(msg.data["file"])
-            url_list.append(msg.data["url"].replace("https://", "http://"))
-    return text, file_list, url_list
+            file_list.append(msg.data["file"][-40:])
+            url_list.append(msg.data["url"])
+        elif msg.type == "record":
+            text += "[语音]" if text or reply_mode else ""
+            # file_list.append(msg.data["file"][-40:])
+            # url_list.append(msg.data["url"])
+        elif msg.type == "video":
+            text += "[视频]" if text or reply_mode else ""
+            # file_list.append(msg.data["file"][-40:])
+            # url_list.append(msg.data["url"])
+        elif msg.type == "share":
+            # 链接分享
+            embeds.append(
+                Embed(
+                    title=msg.data["title"],
+                    url=msg.data["url"],
+                    description=msg.data["content"],
+                    image=msg.data["image"],
+                )
+            )
+        elif msg.type == "contact":
+            # 推荐好友/群
+            type = "好友" if msg.data["type"] == "qq" else "群"
+            text += f'推荐{type}：{msg.data["id"]}'
+        elif msg.type == "location":
+            # 位置共享
+            text += f'[位置共享](lat:{msg.data["lat"]}, lon: {msg.data["lon"]})'
+            embeds.append(
+                Embed(
+                    title=msg.data["title"],
+                    description=msg.data["content"],
+                )
+            )
+        elif msg.type == "music":
+            # 音乐分享
+            text += "[音乐分享]"
+        elif msg.type == "forward":
+            # 合并转发
+            text += "[合并转发]" if not text else ""
+        elif msg.type == "xml":
+            if len(msg) == 1:
+                text += f"[xml 消息]({msg.data})"
+        elif msg.type == "json":
+            if len(msg) == 1:
+                text += f"[json 消息]({msg.data})"
+        else:
+            text += f"[不支持的消息类型](type: {msg.type}, data: {msg.data})"
+    return text, file_list, url_list, embeds
 
 
 async def send_to_discord(
@@ -182,16 +227,16 @@ async def send_to_discord(
     webhook_id: int,
     token: str,
     text: Optional[str],
-    img_files: Optional[list[str]],
-    img_urls: Optional[list[str]],
+    file_list: Optional[list[str]],
+    url_list: Optional[list[str]],
     embed: Optional[list[Embed]],
     username: Optional[str],
     avatar_url: Optional[str],
 ) -> MessageGet:
     """用 webhook 发送到 discord"""
-    if img_files and img_urls:
+    if file_list and url_list:
         get_img_tasks = [
-            build_dc_file(file, url) for file, url in zip(img_files, img_urls)
+            build_dc_file(file, url) for file, url in zip(file_list, url_list)
         ]
         files = await asyncio.gather(*get_img_tasks)
     else:
@@ -230,12 +275,10 @@ async def create_qq_to_dc(
 
     logger.debug("into create_qq_to_dc()")
     link = next(link for link in channel_links if link.qq_group_id == event.group_id)
-    text, img_files, img_urls = await build_dc_message(bot, event.message, link)
+    text, file_list, url_list, embeds = await build_dc_message(bot, event.message, link)
 
     if reply := event.reply:
-        embeds = await build_dc_embeds(bot, dc_bot, reply, link)
-    else:
-        embeds = None
+        embeds.append(await build_dc_embeds(bot, dc_bot, reply, link))
 
     username = (
         f"{event.sender.card or event.sender.nickname} [QQ:{event.sender.user_id}]"
@@ -250,8 +293,8 @@ async def create_qq_to_dc(
                 link.webhook_id,
                 link.webhook_token,
                 text,
-                img_files,
-                img_urls,
+                file_list,
+                url_list,
                 embeds,
                 username,
                 avatar,
@@ -268,6 +311,7 @@ async def create_qq_to_dc(
         async with get_session() as session:
             session.add(MsgID(dcid=send.id, qqid=event.message_id))
             await session.commit()
+
     logger.debug("finish create_qq_to_dc()")
 
 

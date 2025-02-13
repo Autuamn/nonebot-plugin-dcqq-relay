@@ -1,5 +1,9 @@
 import re
+import ssl
 from typing import Optional, Union
+
+from pydub import AudioSegment
+from io import BytesIO
 
 import aiohttp
 from nonebot import logger
@@ -92,11 +96,15 @@ async def get_dc_member_name(
 
 
 async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
-    async with (
-        aiohttp.ClientSession() as session,
-        session.get(url, proxy=proxy) as response,
-    ):
-        return await response.read()
+    try:
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(url, proxy=proxy) as response,
+        ):
+            return await response.read()
+    except ssl.SSLError:
+        url = url.replace("https://", "http://")
+        return await get_file_bytes(url, proxy)
 
 
 async def get_webhook(
@@ -145,3 +153,19 @@ async def build_link(
         webhook_token=webhook_token,
         **model_dump(link, exclude={"webhook_id", "webhook_token"}),
     )
+
+
+async def get_mp3_bytes(url: str, proxy: Optional[str]) -> bytes:
+    # 获取原始OGG音频
+    ogg_bytes = await get_file_bytes(url, proxy)
+
+    # 将OGG转换为MP3
+    audio = AudioSegment.from_file(BytesIO(ogg_bytes), format="ogg")
+
+    # 创建内存文件对象
+    mp3_buffer = BytesIO()
+    audio.export(mp3_buffer, format="mp3", bitrate="128k")
+
+    # 重置指针并返回字节
+    mp3_buffer.seek(0)
+    return mp3_buffer.read()

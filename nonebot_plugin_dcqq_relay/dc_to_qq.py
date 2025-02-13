@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from .config import LinkWithWebhook, plugin_config
 from .model import MsgID
-from .utils import get_dc_member_name, get_file_bytes
+from .utils import get_dc_member_name, get_file_bytes, get_mp3_bytes
 
 discord_proxy = plugin_config.discord_proxy
 
@@ -57,7 +57,7 @@ async def build_qq_message(
     img_url_list: list[str] = []
     message = (
         event
-        if event.content
+        if event.content or event.attachments
         else (
             await bot.get_channel_message(
                 channel_id=event.channel_id, message_id=event.message_id
@@ -137,6 +137,19 @@ async def build_qq_message(
                 r"image/(gif|jpeg|png|webp)", attachment.content_type, 0
             ):
                 img_url_list.append(attachment.url)
+            elif attachment.content_type is not UNSET and re.match(
+                r"audio/ogg", attachment.content_type, 0
+            ):
+                qq_message.append(
+                    MessageSegment.record(
+                        file=await get_mp3_bytes(
+                            attachment.url,
+                            discord_proxy,
+                        )
+                    )
+                )
+            else:
+                qq_message += MessageSegment.text("[附件]")
 
     return qq_message, img_url_list
 
