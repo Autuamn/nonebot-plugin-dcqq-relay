@@ -195,10 +195,10 @@ async def build_dc_message(
         elif msg.type == "contact":
             # 推荐好友/群
             type = "好友" if msg.data["type"] == "qq" else "群"
-            text += f'推荐{type}：{msg.data["id"]}'
+            text += f"推荐{type}：{msg.data['id']}"
         elif msg.type == "location":
             # 位置共享
-            text += f'[位置共享](lat:{msg.data["lat"]}, lon: {msg.data["lon"]})'
+            text += f"[位置共享](lat:{msg.data['lat']}, lon: {msg.data['lon']})"
             embeds.append(
                 Embed(
                     title=msg.data["title"],
