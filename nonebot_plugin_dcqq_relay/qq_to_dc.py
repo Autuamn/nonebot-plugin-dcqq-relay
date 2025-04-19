@@ -20,7 +20,7 @@ from sqlalchemy import select
 from .config import LinkWithWebhook
 from .qq_emoji_dict import qq_emoji_dict
 from .model import MsgID
-from .utils import get_dc_member_name, get_file_bytes
+from .utils import get_dc_member_name, get_file_bytes, audio_transform
 
 
 async def get_qq_member_name(bot: qq_Bot, group_id: int, user_id: int) -> str:
@@ -47,7 +47,11 @@ async def get_dc_member_avatar(bot: dc_Bot, guild_id: int, user_id: int) -> str:
 
 
 async def build_dc_file(file: str, url: str) -> File:
-    """获取图片文件，用于发送到 Discord"""
+    """获取文件，用于发送到 Discord"""
+    if file == "voice-message.silk":
+        voice_bytes = await audio_transform(url, "silk")
+        return File(content=voice_bytes, filename="voice-message.ogg")
+
     img_bytes = await get_file_bytes(url)
     if re.search(r"\.[a-z]+$", file):
         filename = file
@@ -176,8 +180,8 @@ async def build_dc_message(
             url_list.append(msg.data["url"])
         elif msg.type == "record":
             text += "[语音]" if text or reply_mode else ""
-            # file_list.append(msg.data["file"][-40:])
-            # url_list.append(msg.data["url"])
+            file_list.append("voice-message.silk")
+            url_list.append(msg.data["url"])
         elif msg.type == "video":
             text += "[视频]" if text or reply_mode else ""
             # file_list.append(msg.data["file"][-40:])

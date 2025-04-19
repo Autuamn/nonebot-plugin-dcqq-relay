@@ -1,7 +1,8 @@
 import re
 import ssl
-from typing import Optional, Union
+from typing import Optional, Union, Literal
 
+import pysilk
 from pydub import AudioSegment
 from io import BytesIO
 
@@ -155,17 +156,19 @@ async def build_link(
     )
 
 
-async def get_mp3_bytes(url: str, proxy: Optional[str]) -> bytes:
-    # 获取原始OGG音频
-    ogg_bytes = await get_file_bytes(url, proxy)
+async def audio_transform(
+    url: str, input_type: Literal["ogg", "silk"], proxy: Optional[str] = None
+) -> bytes:
+    origin_bytes = await get_file_bytes(url, proxy)
+    output_buffer = BytesIO()  # 创建内存文件对象
 
-    # 将OGG转换为MP3
-    audio = AudioSegment.from_file(BytesIO(ogg_bytes), format="ogg")
+    if input_type == "ogg":
+        audio = AudioSegment.from_file(BytesIO(origin_bytes), format="ogg")
+        audio.export(output_buffer, format="mp3", bitrate="128k")
+    else:
+        pcm_bytes = pysilk.decode(origin_bytes, True, sample_rate=44100)
+        audio = AudioSegment.from_file(BytesIO(pcm_bytes), format="wav")
+        audio.export(output_buffer, format="ogg")
 
-    # 创建内存文件对象
-    mp3_buffer = BytesIO()
-    audio.export(mp3_buffer, format="mp3", bitrate="128k")
-
-    # 重置指针并返回字节
-    mp3_buffer.seek(0)
-    return mp3_buffer.read()
+    output_buffer.seek(0)  # 重置指针
+    return output_buffer.read()

@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from .config import LinkWithWebhook, plugin_config
 from .model import MsgID
-from .utils import get_dc_member_name, get_file_bytes, get_mp3_bytes
+from .utils import get_dc_member_name, get_file_bytes, audio_transform
 
 discord_proxy = plugin_config.discord_proxy
 
@@ -142,8 +142,9 @@ async def build_qq_message(
             ):
                 qq_message.append(
                     MessageSegment.record(
-                        file=await get_mp3_bytes(
+                        file=await audio_transform(
                             attachment.url,
+                            "ogg",
                             discord_proxy,
                         )
                     )
