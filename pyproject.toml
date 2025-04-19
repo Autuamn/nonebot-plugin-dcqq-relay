@@ -17,10 +17,16 @@ filetype = "^1.2.0"
 pydub = "^0.25.1"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.3.0"
+ruff = "^0.11.6"
 black = "^24.3.0"
 nonemoji = "^0.1.2"
 pre-commit = "^3.1.0"
+
+
+[[tool.poetry.source]]
+name = "mirrors"
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
+priority = "primary"
 
 [tool.ruff]
 line-length = 88
