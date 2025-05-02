@@ -1,17 +1,22 @@
 import asyncio
 import re
-from typing import Optional
+from urllib.request import url2pathname
+from pathlib import Path
+from typing import Any, Callable, Optional
+from collections.abc import Coroutine
 
 import filetype
 from nonebot import logger
+from nonebot.adapters import Bot
 from nonebot.adapters.discord import Bot as dc_Bot
-from nonebot.adapters.discord.api import UNSET, Embed, EmbedAuthor, File, MessageGet
+from nonebot.adapters.discord.api import Embed, EmbedAuthor, File
 from nonebot.adapters.discord.exception import NetworkError
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
     GroupMessageEvent,
     GroupRecallNoticeEvent,
     Message,
+    MessageSegment,
 )
 from nonebot.adapters.onebot.v11.event import Reply
 from nonebot_plugin_orm import get_session
@@ -20,7 +25,7 @@ from sqlalchemy import select
 from .config import LinkWithWebhook
 from .qq_emoji_dict import qq_emoji_dict
 from .model import MsgID
-from .utils import get_dc_member_name, get_file_bytes, audio_transform
+from .utils import get_file_bytes, skil_to_ogg
 
 
 async def get_qq_member_name(bot: qq_Bot, group_id: int, user_id: int) -> str:
@@ -31,242 +36,15 @@ async def get_qq_member_name(bot: qq_Bot, group_id: int, user_id: int) -> str:
     )["nickname"]
 
 
-async def get_dc_member_avatar(bot: dc_Bot, guild_id: int, user_id: int) -> str:
-    member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
-    if member.avatar is not UNSET and (avatar := member.avatar):
-        return (
-            f"https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/avatars/{avatar}."
-            + ("gif" if re.match(r"^a_.*", avatar) else "webp")
-        )
-    elif (user := member.user) and user is not UNSET and user.avatar:
-        return f"https://cdn.discordapp.com/avatars/{user_id}/{user.avatar}." + (
-            "gif" if re.match(r"^a_.*", user.avatar) else "webp"
-        )
-    else:
-        return ""
-
-
-async def build_dc_file(file: str, url: str) -> File:
+async def build_dc_file(bot: Bot, file: str, url: str) -> File:
     """获取文件，用于发送到 Discord"""
-    if file == "voice-message.silk":
-        voice_bytes = await audio_transform(url, "silk")
-        return File(content=voice_bytes, filename="voice-message.ogg")
-
-    img_bytes = await get_file_bytes(url)
+    img_bytes = await get_file_bytes(bot, url)
     if re.search(r"\.[a-z]+$", file):
         filename = file
     else:
         match = filetype.match(img_bytes)
         filename = file + ("." + match.extension) if match else ""
     return File(content=img_bytes, filename=filename)
-
-
-async def build_dc_embeds(
-    bot: qq_Bot,
-    dc_bot: dc_Bot,
-    reply: Reply,
-    link: LinkWithWebhook,
-) -> Embed:
-    """处理 QQ 转 discord 中的回复部分"""
-    guild_id, channel_id = link.dc_guild_id, link.dc_channel_id
-
-    author = ""
-    timestamp = f"<t:{reply.time}:R>"
-
-    async with get_session() as session:
-        plaintext_msg = (await build_dc_message(bot, reply.message, link, True))[0]
-        if reference_id := await session.scalar(
-            select(MsgID.dcid).filter(MsgID.qqid == reply.message_id).limit(1)
-        ):
-            if str(reply.sender.user_id) == bot.self_id:
-                dc_message = await dc_bot.get_channel_message(
-                    channel_id=channel_id, message_id=reference_id
-                )
-                name, _ = await get_dc_member_name(
-                    dc_bot, guild_id, dc_message.author.id
-                )
-                author = EmbedAuthor(
-                    name=name + f"(@{dc_message.author.username})",
-                    icon_url=await get_dc_member_avatar(
-                        dc_bot, guild_id, dc_message.author.id
-                    ),
-                )
-                plaintext_msg = dc_message.content
-                timestamp = f"<t:{int(dc_message.timestamp.timestamp())}:R>"
-
-            description = (
-                f"{plaintext_msg}\n\n"
-                + timestamp
-                + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
-            )
-        else:
-            description = f"{plaintext_msg}\n\n" + timestamp + "[ ? ]"
-
-        if not author:
-            author = EmbedAuthor(
-                name=(reply.sender.card or reply.sender.nickname or "")
-                + f"[QQ:{reply.sender.user_id}]",
-                icon_url=f"https://q.qlogo.cn/g?b=qq&nk={reply.sender.user_id}&s=100",
-            )
-
-    embed = Embed(
-        author=author,
-        description=description,
-    )
-    return embed
-
-
-async def build_dc_message(
-    bot: qq_Bot,
-    message: Message,
-    link: LinkWithWebhook,
-    reply_mode: bool = False,
-) -> tuple[str, list[str], list[str], list[Embed]]:
-    """获取 QQ 消息，用于发送到 discord"""
-    text = ""
-    file_list: list[str] = []
-    url_list: list[str] = []
-    embeds: list[Embed] = []
-    for msg in message:
-        if msg.type == "text":
-            # 文本
-            text += (
-                msg.data["text"]
-                .replace("@everyone", "@.everyone")
-                .replace("@here", "@.here")
-            )
-        elif msg.type == "face":
-            # QQ表情
-            text += (
-                "["
-                + qq_emoji_dict.get(
-                    str(msg.data["id"]), "QQemojiID:" + str(msg.data["id"])
-                )
-                + "]"
-            )
-        elif msg.type == "mface":
-            # 表情商城表情
-            if msg.data["summary"] and msg.data["url"]:
-                text += msg.data["summary"] if text or reply_mode else ""
-                file_list.append(msg.data["summary"] + ".gif")
-                url_list.append(msg.data["url"])
-            else:
-                text += "[动画表情]" if text or reply_mode else ""
-                file_list.append(msg.data["id"] + ".gif")
-                url_list.append(
-                    f"https://gxh.vip.qq.com/club/item/parcel/item/{msg.data['id'][:2]}/{msg.data['id']}/raw300.gif"
-                )
-        elif msg.type == "marketface":
-            # 表情商城表情
-            text += msg.data["summary"] if text or reply_mode else ""
-            file_list.append(msg.data["summary"] + ".gif")
-            url_list.append(
-                f"https://gxh.vip.qq.com/club/item/parcel/item/{msg.data['face_id'][:2]}/{msg.data['face_id']}/raw300.gif"
-            )
-        elif msg.type == "at":
-            # @人
-            qq = msg.data.get("user_id", None) or msg.data["qq"]
-            name = msg.data.get("name", None)
-            if qq in ["0", "all"]:
-                text += "@everyone"
-            else:
-                text += (
-                    name or f"@{await get_qq_member_name(bot, link.qq_group_id, qq)}"
-                ) + f"[QQ:{qq}] "
-        elif msg.type == "image":
-            # 图片
-            text += "[图片]" if text or reply_mode else ""
-            file_list.append(msg.data["file"][-40:])
-            url_list.append(msg.data["url"])
-        elif msg.type == "record":
-            text += "[语音]" if text or reply_mode else ""
-            file_list.append("voice-message.silk")
-            url_list.append(msg.data["url"])
-        elif msg.type == "video":
-            text += "[视频]" if text or reply_mode else ""
-            # file_list.append(msg.data["file"][-40:])
-            # url_list.append(msg.data["url"])
-        elif msg.type == "share":
-            # 链接分享
-            embeds.append(
-                Embed(
-                    title=msg.data["title"],
-                    url=msg.data["url"],
-                    description=msg.data["content"],
-                    image=msg.data["image"],
-                )
-            )
-        elif msg.type == "contact":
-            # 推荐好友/群
-            type = "好友" if msg.data["type"] == "qq" else "群"
-            text += f"推荐{type}：{msg.data['id']}"
-        elif msg.type == "location":
-            # 位置共享
-            text += f"[位置共享](lat:{msg.data['lat']}, lon: {msg.data['lon']})"
-            embeds.append(
-                Embed(
-                    title=msg.data["title"],
-                    description=msg.data["content"],
-                )
-            )
-        elif msg.type == "music":
-            # 音乐分享
-            text += "[音乐分享]"
-        elif msg.type == "forward":
-            # 合并转发
-            text += "[合并转发]" if not text else ""
-        elif msg.type == "xml":
-            if len(msg) == 1:
-                text += f"[xml 消息]({msg.data})"
-        elif msg.type == "json":
-            if len(msg) == 1:
-                text += f"[json 消息]({msg.data})"
-        else:
-            text += f"[不支持的消息类型](type: {msg.type}, data: {msg.data})"
-    return text, file_list, url_list, embeds
-
-
-async def send_to_discord(
-    bot: dc_Bot,
-    webhook_id: int,
-    token: str,
-    text: Optional[str],
-    file_list: Optional[list[str]],
-    url_list: Optional[list[str]],
-    embed: Optional[list[Embed]],
-    username: Optional[str],
-    avatar_url: Optional[str],
-) -> MessageGet:
-    """用 webhook 发送到 discord"""
-    if file_list and url_list:
-        get_img_tasks = [
-            build_dc_file(file, url) for file, url in zip(file_list, url_list)
-        ]
-        files = await asyncio.gather(*get_img_tasks)
-    else:
-        files = None
-
-    try_times = 1
-    while True:
-        try:
-            send = await bot.execute_webhook(
-                webhook_id=webhook_id,
-                token=token,
-                content=text or "",
-                files=files,
-                embeds=embed,
-                username=username,
-                avatar_url=avatar_url,
-                wait=True,
-            )
-            break
-        except NetworkError as e:
-            logger.warning(f"send_to_discord() error: {e}, retry {try_times}")
-            if try_times == 3:
-                raise e
-            try_times += 1
-            await asyncio.sleep(5)
-    return send
 
 
 async def create_qq_to_dc(
@@ -276,13 +54,15 @@ async def create_qq_to_dc(
     channel_links: list[LinkWithWebhook],
 ):
     """QQ 消息转发到 discord"""
-
     logger.debug("into create_qq_to_dc()")
     link = next(link for link in channel_links if link.qq_group_id == event.group_id)
-    text, file_list, url_list, embeds = await build_dc_message(bot, event.message, link)
+    builder = MessageBuilder()
+
+    seg_msg = event.get_message()
+    text, files, embeds = await builder.build(seg_msg, bot, event)
 
     if reply := event.reply:
-        embeds.append(await build_dc_embeds(bot, dc_bot, reply, link))
+        embeds = [await builder.handle_reply(reply, bot, link), *embeds]
 
     username = (
         f"{event.sender.card or event.sender.nickname} [QQ:{event.sender.user_id}]"
@@ -292,29 +72,27 @@ async def create_qq_to_dc(
     try_times = 1
     while True:
         try:
-            send = await send_to_discord(
-                dc_bot,
-                link.webhook_id,
-                link.webhook_token,
-                text,
-                file_list,
-                url_list,
-                embeds,
-                username,
-                avatar,
+            send = await dc_bot.execute_webhook(
+                webhook_id=link.webhook_id,
+                token=link.webhook_token,
+                content=text,
+                files=files,
+                embeds=embeds,
+                username=username,
+                avatar_url=avatar,
+                wait=True,
             )
             break
-        except NameError as e:
+        except (NameError, NetworkError) as e:
             logger.warning(f"create_qq_to_dc() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
             await asyncio.sleep(5)
 
-    if send:
-        async with get_session() as session:
-            session.add(MsgID(dcid=send.id, qqid=event.message_id))
-            await session.commit()
+    async with get_session() as session:
+        session.add(MsgID(dcid=send.id, qqid=event.message_id))
+        await session.commit()
 
     logger.debug("finish create_qq_to_dc()")
 
@@ -356,3 +134,345 @@ async def delete_qq_to_dc(
                 raise e
             try_times += 1
             await asyncio.sleep(5)
+
+
+class MsgResult:
+    """消息处理结果容器"""
+
+    embed: Optional[Embed]
+    ensure_text: bool
+    file: Optional[File]
+    text: Optional[str]
+
+    __slots__ = ("embed", "ensure_text", "file", "text")
+
+    def __init__(self, *, embed=None, ensure=False, file=None, text=None):
+        self.embed = embed
+        self.ensure_text = ensure
+        self.file = file
+        self.text = text
+
+
+class MessageBuilder:
+    _mapping: dict[
+        str,
+        Callable[
+            [MessageSegment, qq_Bot, GroupMessageEvent],
+            Coroutine[Any, Any, MsgResult],
+        ],
+    ]
+
+    def __init__(self):
+        self._mapping = {
+            "text": self.text,
+            "face": self.face,
+            "mface": self.mface,
+            "marketface": self.marketface,
+            "at": self.at,
+            "image": self.image,
+            "record": self.record,
+            "video": self.video,
+            "file": self.file,
+            "share": self.share,
+            "contact": self.contact,
+            "location": self.location,
+            "music": self.music,
+            "forward": self.forward,
+            "xml": self.xml,
+            "json": self.json,
+        }
+
+    async def build(
+        self, seg_msg: Message, bot: qq_Bot, event: GroupMessageEvent
+    ) -> tuple[str, list[File], list[Embed]]:
+        result: list[Coroutine[Any, Any, MsgResult]] = []
+        text: str = ""
+        files: list[File] = []
+        embeds: list[Embed] = []
+
+        result.extend(self.convert(seg, bot, event) for seg in seg_msg)
+
+        send_msg = await asyncio.gather(*result)
+
+        for res in send_msg:
+            text += (
+                res.text
+                if res.text and (res.ensure_text or seg_msg.extract_plain_text())
+                else ""
+            )
+            files.append(res.file) if res.file else ...
+            embeds.append(res.embed) if res.embed else ...
+
+        if not (text or files or embeds):
+            text = "[未知消息]"
+
+        return text, files, embeds
+
+    def convert(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> Coroutine[Any, Any, MsgResult]:
+        seg_type = seg.type
+        if seg_type in self._mapping:
+            res = self._mapping[seg_type](seg, bot, event)
+        else:
+            res = self.other(seg, bot, event)
+
+        return res
+
+    def extract_plain_text(self, msg_res: list[MsgResult]) -> str:
+        return "".join([res.text for res in msg_res if res.text])
+
+    async def handle_reply(
+        self,
+        reply: Reply,
+        bot: qq_Bot,
+        link: LinkWithWebhook,
+    ) -> Embed:
+        author = ""
+        sender = reply.sender
+        timestamp = f"<t:{reply.time}:R>"
+        plaintext_msg = reply.message.extract_plain_text()
+        guild_id, channel_id = link.dc_guild_id, link.dc_channel_id
+
+        if (
+            re.match(r"^.*?\(@.*?\):\n\n", plaintext_msg)
+            and str(sender.user_id) == bot.self_id
+        ):
+            name = plaintext_msg.split("\n")[0][:-1]
+            author = EmbedAuthor(name=name)
+            plaintext_msg = "\n".join(plaintext_msg.split("\n")[2:])
+        else:
+            author = EmbedAuthor(
+                name=(sender.card or sender.nickname or "") + f"[QQ:{sender.user_id}]",
+                icon_url=f"https://q.qlogo.cn/g?b=qq&nk={sender.user_id}&s=100",
+            )
+
+        async with get_session() as session:
+            reference_id = await session.scalar(
+                select(MsgID.dcid).filter(MsgID.qqid == reply.message_id).limit(1)
+            )
+        if reference_id:
+            description = (
+                f"{plaintext_msg}\n\n"
+                + timestamp
+                + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
+            )
+        else:
+            description = f"{plaintext_msg}\n\n{timestamp}[ ? ]"
+
+        return Embed(
+            author=author,
+            description=description,
+        )
+
+    async def text(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        content = (
+            seg.data["text"]
+            .replace("@everyone", "@.everyone")
+            .replace("@here", "@.here")
+        )
+        return MsgResult(text=content)
+
+    async def at(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        data = seg.data
+        qq = data.get("user_id") or data["qq"]
+
+        if qq in ["0", "all"]:
+            return MsgResult(text="@everyone")
+
+        name = data.get("name")
+        if not name:
+            name = await get_qq_member_name(bot, event.group_id, qq)
+
+        return MsgResult(text=f"[{name}](mailto:{qq}@qq.com)[QQ:{qq}] ")
+
+    async def face(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        face_id = str(seg.data["id"])
+        emoji = qq_emoji_dict.get(face_id, f"QQemojiID:{face_id}")
+        return MsgResult(text=f"[{emoji}]")
+
+    async def mface(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        data = seg.data
+
+        if data.get("summary") and data.get("url"):
+            return MsgResult(
+                text=data["summary"],
+                file=await build_dc_file(bot, f"{data['summary']}.gif", data["url"]),
+            )
+
+        return MsgResult(
+            text="[动画表情]",
+            file=await build_dc_file(
+                bot,
+                f"{data['id']}.gif",
+                "https://gxh.vip.qq.com/club/item/parcel/item/"
+                + f"{data['id'][:2]}/{data['id']}/raw300.gif",
+            ),
+        )
+
+    async def marketface(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        return MsgResult(
+            text=seg.data["summary"],
+            file=await build_dc_file(
+                bot,
+                f"{seg.data['summary']}.gif",
+                "https://gxh.vip.qq.com/club/item/parcel/item/"
+                + f"{seg.data['face_id'][:2]}/{seg.data['face_id']}/raw300.gif",
+            ),
+        )
+
+    async def image(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        return MsgResult(
+            text="[图片]",
+            file=await build_dc_file(bot, seg.data["file"][-40:], seg.data["url"]),
+        )
+
+    async def record(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        if path := seg.data.get("path", ""):
+            while True:
+                if not Path(path).exists():
+                    await asyncio.sleep(0.1)
+                    continue
+                record_bytes = Path(path).read_bytes()
+                break
+        elif url := seg.data.get("url", ""):
+            record_bytes = await get_file_bytes(bot, url)
+        else:
+            path = url2pathname(seg.data["file"].removeprefix("file:"))
+            record_bytes = Path(path).read_bytes()
+
+        return MsgResult(
+            text="[语音]",
+            file=File(
+                content=skil_to_ogg(record_bytes),
+                filename="voice-message.ogg",
+            ),
+        )
+
+    async def video(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        filename = seg.data.get("file_name", "") or seg.data.get("file", "")
+        url = seg.data["url"]
+
+        if path := seg.data.get("path", ""):
+            content = Path(path).read_bytes()
+        elif re.match(r"[A-Z]:\\\\", url):
+            content = Path(url).read_bytes()
+        elif "http" in url:
+            content = await get_file_bytes(bot, url)
+        else:
+            return MsgResult(text=f"[{filename}]")
+
+        return MsgResult(
+            text=f"[{filename}]",
+            file=File(filename=filename, content=content),
+        )
+
+    async def file(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        filename = seg.data.get("file_name", "") or seg.data.get("file", "")
+
+        if "http" in seg.data.get("url", ""):
+            content = await get_file_bytes(bot, seg.data["url"])
+        elif file_id := seg.data.get("file_id", ""):
+            file_info = await bot.call_api("get_file", file_id=file_id)
+            content = Path(file_info["file"]).read_bytes()
+        else:
+            return MsgResult(text=f"[{filename}]")
+
+        return MsgResult(
+            text=f"[{filename}]", file=File(content=content, filename=filename)
+        )
+
+    async def share(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        data = seg.data
+        embed = Embed(
+            title=data["title"],
+            url=data["url"],
+            description=data["content"],
+            image=data["image"],
+        )
+        return MsgResult(embed=embed)
+
+    async def contact(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        contact_type = "好友" if seg.data["type"] == "qq" else "群"
+        return MsgResult(ensure=True, text=f"<推荐{contact_type}：{seg.data['id']}>")
+
+    async def location(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        data = seg.data
+        embed = Embed(
+            title=data["title"],
+            description=f"{data['content']}\nlat:{data['lat']}, lon: {data['lon']}",
+        )
+        return MsgResult(embed=embed)
+
+    async def music(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        return MsgResult(ensure=True, text="[音乐分享]")
+
+    async def forward(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        return MsgResult(ensure=True, text="[合并转发]")
+
+    async def xml(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        return (
+            MsgResult(ensure=True, text=f"[xml 消息]({seg.data})")
+            if len(seg) == 1
+            else MsgResult()
+        )
+
+    async def json(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        return (
+            MsgResult(ensure=True, text=f"[json 消息]({seg.data})")
+            if len(seg) == 1
+            else MsgResult()
+        )
+
+    async def rps(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        res = {"0": "", "1": "石头", "2": "剪刀", "3": "布"}[
+            seg.data.get("result", "0")
+        ]
+        return MsgResult(ensure=True, text=f"[猜拳{'：' if res else ''}{res}]")
+
+    async def dice(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        res = seg.data.get("result", "")
+        return MsgResult(ensure=True, text=f"[掷骰子{'：' if res else ''}{res}]")
+
+    async def other(
+        self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
+    ) -> MsgResult:
+        return MsgResult(
+            ensure=True, text=f"[不支持的类型](type: {seg.type}, data: {seg.data})"
+        )

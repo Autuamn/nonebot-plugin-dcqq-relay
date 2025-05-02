@@ -1,17 +1,18 @@
 import re
 import ssl
-from typing import Optional, Union, Literal
+from typing import Optional, Union
 
 import pysilk
 from pydub import AudioSegment
 from io import BytesIO
 
-import aiohttp
 from nonebot import logger
+from nonebot.adapters import Bot
+from nonebot.internal.driver import Request
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
-    MessageCreateEvent,
-    MessageDeleteEvent,
+    GuildMessageCreateEvent,
+    GuildMessageDeleteEvent,
 )
 from nonebot.adapters.discord.api import UNSET, Missing
 from nonebot.adapters.discord.exception import ActionFailed
@@ -30,16 +31,16 @@ discord_proxy = plugin_config.discord_proxy
 async def check_messages(
     event: Union[
         GroupMessageEvent,
-        MessageCreateEvent,
+        GuildMessageCreateEvent,
         GroupRecallNoticeEvent,
-        MessageDeleteEvent,
+        GuildMessageDeleteEvent,
     ],
 ) -> bool:
     """检查消息"""
     logger.debug("into check_messages()")
     if isinstance(event, GroupMessageEvent):
         return any(event.group_id == link.qq_group_id for link in channel_links)
-    elif isinstance(event, MessageCreateEvent):
+    elif isinstance(event, GuildMessageCreateEvent):
         if not (
             re.match(r".*?\[QQ:\d*?\]$", event.author.username)
             and event.author.bot is True
@@ -53,7 +54,7 @@ async def check_messages(
             return False
     elif isinstance(event, GroupRecallNoticeEvent):
         return any(event.group_id == link.qq_group_id for link in channel_links)
-    elif isinstance(event, MessageDeleteEvent):
+    elif isinstance(event, GuildMessageDeleteEvent):
         return any(
             event.guild_id == link.dc_guild_id
             and event.channel_id == link.dc_channel_id
@@ -64,12 +65,12 @@ async def check_messages(
 async def check_to_me(
     event: Union[
         GroupMessageEvent,
-        MessageCreateEvent,
+        GuildMessageCreateEvent,
         GroupRecallNoticeEvent,
-        MessageDeleteEvent,
+        GuildMessageDeleteEvent,
     ],
 ) -> bool:
-    if isinstance(event, (GroupMessageEvent, MessageCreateEvent)):
+    if isinstance(event, (GroupMessageEvent, GuildMessageCreateEvent)):
         return event.to_me
     return True
 
@@ -96,16 +97,18 @@ async def get_dc_member_name(
             raise e
 
 
-async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
+async def get_file_bytes(bot: Bot, url: str, proxy: Optional[str] = None) -> bytes:
     try:
-        async with (
-            aiohttp.ClientSession() as session,
-            session.get(url, proxy=proxy) as response,
-        ):
-            return await response.read()
-    except ssl.SSLError:
+        resp = await bot.adapter.request(Request("GET", url, proxy=proxy))
+        if isinstance(resp.content, bytes):
+            return resp.content
+        else:
+            raise TypeError("Response content is not bytes")
+    except ssl.SSLError as e:
+        if url.startswith("http://"):
+            raise e
         url = url.replace("https://", "http://")
-        return await get_file_bytes(url, proxy)
+        return await get_file_bytes(bot, url, proxy)
 
 
 async def get_webhook(
@@ -124,7 +127,7 @@ async def get_webhook(
             None,
         )
         if bot_webhook and bot_webhook.token:
-            return await build_link(link, bot_webhook.id, bot_webhook.token)
+            return build_link(link, bot_webhook.id, bot_webhook.token)
     except Exception as e:
         logger.error(
             f"get webhook error, Discord channel id: {link.dc_channel_id}, error: {e}"
@@ -134,7 +137,7 @@ async def get_webhook(
             channel_id=link.dc_channel_id, name=str(link.dc_channel_id)
         )
         if create_webhook.token:
-            return await build_link(link, create_webhook.id, create_webhook.token)
+            return build_link(link, create_webhook.id, create_webhook.token)
     except Exception as e:
         logger.error(
             f"create webhook error, Discord channel id: {link.dc_channel_id}, "
@@ -146,7 +149,7 @@ async def get_webhook(
     return link.dc_channel_id
 
 
-async def build_link(
+def build_link(
     link: LinkWithoutWebhook, webhook_id: int, webhook_token: str
 ) -> LinkWithWebhook:
     return LinkWithWebhook(
@@ -156,19 +159,37 @@ async def build_link(
     )
 
 
-async def audio_transform(
-    url: str, input_type: Literal["ogg", "silk"], proxy: Optional[str] = None
-) -> bytes:
-    origin_bytes = await get_file_bytes(url, proxy)
+def pydub_transform(origin_bytes: bytes, input_type: str, output_type: str) -> bytes:
     output_buffer = BytesIO()  # 创建内存文件对象
 
-    if input_type == "ogg":
-        audio = AudioSegment.from_file(BytesIO(origin_bytes), format="ogg")
-        audio.export(output_buffer, format="mp3", bitrate="128k")
-    else:
-        pcm_bytes = pysilk.decode(origin_bytes, True, sample_rate=44100)
-        audio = AudioSegment.from_file(BytesIO(pcm_bytes), format="wav")
-        audio.export(output_buffer, format="ogg")
+    audio = AudioSegment.from_file(BytesIO(origin_bytes), format=input_type)
+    audio.export(output_buffer, format=output_type, bitrate="128k")
 
     output_buffer.seek(0)  # 重置指针
     return output_buffer.read()
+
+
+def skil_to_ogg(skil_bytes: bytes) -> bytes:
+    output_buffer = BytesIO()
+
+    pcm_bytes = pysilk.decode(skil_bytes, True, sample_rate=44100)
+    audio = AudioSegment.from_file(BytesIO(pcm_bytes), format="wav")
+    audio.export(output_buffer, format="ogg")
+
+    output_buffer.seek(0)
+    return output_buffer.read()
+
+
+async def get_dc_member_avatar(bot: dc_Bot, guild_id: int, user_id: int) -> str:
+    member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
+    if member.avatar is not UNSET and (avatar := member.avatar):
+        return (
+            f"https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/avatars/{avatar}."
+            + ("gif" if re.match(r"^a_.*", avatar) else "webp")
+        )
+    elif (user := member.user) and user is not UNSET and user.avatar:
+        return f"https://cdn.discordapp.com/avatars/{user_id}/{user.avatar}." + (
+            "gif" if re.match(r"^a_.*", user.avatar) else "webp"
+        )
+    else:
+        return ""

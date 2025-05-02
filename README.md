@@ -123,5 +123,6 @@ Webhook URL 形如：
 
 - [nonebot2](https://github.com/nonebot/nonebot2)
 - [Lagrange.Core](https://github.com/LagrangeDev/Lagrange.Core)
+- [nonebot-plugin-alconna](https://github.com/nonebot/plugin-alconna)
 - [Discord-QQ-Msg-Relay](https://github.com/OasisAkari/Discord-QQ-Msg-Relay)
 - [koishi-plugin-dcqq-relay](https://github.com/koishijs/koishi-plugin-dcqq-relay)

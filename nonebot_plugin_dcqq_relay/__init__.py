@@ -5,8 +5,8 @@ from nonebot import get_driver, logger, on, require
 from nonebot.adapters import Event
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
-    MessageCreateEvent,
-    MessageDeleteEvent,
+    GuildMessageCreateEvent,
+    GuildMessageDeleteEvent,
 )
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
@@ -90,7 +90,7 @@ async def get_webhooks(bot: dc_Bot):
 @matcher.handle()
 async def create_message(
     bot: Union[qq_Bot, dc_Bot],
-    event: Union[GroupMessageEvent, MessageCreateEvent],
+    event: Union[GroupMessageEvent, GuildMessageCreateEvent],
 ):
     logger.debug("into create_message()")
     try_times = 1
@@ -98,7 +98,7 @@ async def create_message(
         try:
             if isinstance(bot, qq_Bot) and isinstance(event, GroupMessageEvent):
                 await create_qq_to_dc(bot, event, dc_bot, with_webhook_links)
-            elif isinstance(bot, dc_Bot) and isinstance(event, MessageCreateEvent):
+            elif isinstance(bot, dc_Bot) and isinstance(event, GuildMessageCreateEvent):
                 await create_dc_to_qq(bot, event, qq_bot, with_webhook_links)
             else:
                 logger.error(
@@ -117,7 +117,7 @@ async def create_message(
 @matcher.handle()
 async def delete_message(
     bot: Union[qq_Bot, dc_Bot],
-    event: Union[GroupRecallNoticeEvent, MessageDeleteEvent],
+    event: Union[GroupRecallNoticeEvent, GuildMessageDeleteEvent],
 ):
     logger.debug("into delete_message()")
     try_times = 1
@@ -125,7 +125,7 @@ async def delete_message(
         try:
             if isinstance(bot, qq_Bot) and isinstance(event, GroupRecallNoticeEvent):
                 await delete_qq_to_dc(event, dc_bot, with_webhook_links, just_delete)
-            elif isinstance(bot, dc_Bot) and isinstance(event, MessageDeleteEvent):
+            elif isinstance(bot, dc_Bot) and isinstance(event, GuildMessageDeleteEvent):
                 await delete_dc_to_qq(event, qq_bot, just_delete)
             else:
                 logger.error(
