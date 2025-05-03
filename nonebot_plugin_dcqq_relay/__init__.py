@@ -18,6 +18,7 @@ from nonebot.rule import Rule, StartswithRule
 from nonebot.typing import T_State
 
 require("nonebot_plugin_orm")
+require("nonebot_plugin_localstore")
 
 from .config import Config, LinkWithoutWebhook, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq

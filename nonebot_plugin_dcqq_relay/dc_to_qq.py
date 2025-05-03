@@ -1,6 +1,9 @@
 import asyncio
 from typing import Any, Callable, Optional
 from collections.abc import Coroutine
+
+from pathlib import Path
+
 from nonebot import logger
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
@@ -19,6 +22,7 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.adapters.onebot.utils import f2s
 from nonebot_plugin_orm import get_session
+from nonebot_plugin_localstore import get_plugin_cache_dir
 from sqlalchemy import select
 
 from .config import LinkWithWebhook, plugin_config
@@ -26,6 +30,7 @@ from .model import MsgID
 from .utils import get_dc_member_name, get_file_bytes, pydub_transform
 
 discord_proxy = plugin_config.discord_proxy
+cache_dir = get_plugin_cache_dir()
 
 
 async def get_dc_channel_name(bot: dc_Bot, guild_id: int, channel_id: int) -> str:
@@ -42,6 +47,44 @@ async def get_dc_role_name(bot: dc_Bot, guild_id: int, role_id: int) -> str:
     roles = await bot.get_guild_roles(guild_id=guild_id)
     role = next(role for role in roles if role.id == role_id)
     return role.name
+
+
+async def upload_group_file(bot: qq_Bot, group_id: int, files: list[qq_M]):
+    tasks = [
+        bot.call_api(
+            "upload_group_file",
+            group_id=group_id,
+            file=file[0].data["file"],
+            name=file[0].data["name"],
+            folder="",
+        )
+        for file in files
+    ]
+    asyncio.gather(*tasks)
+
+
+async def prepare_file(bot: qq_Bot, files: list[qq_M]) -> tuple[list[qq_M], bool]:
+    need_upload: bool = False
+    version_info = await bot.get_version_info()
+
+    if version_info["app_name"] == "NapCat.Onebot":
+        for file in files:
+            file[0].data["file"] = f2s(file[0].data["file"])
+        return files, need_upload
+
+    if version_info["app_name"] == "Lagrange.OneBot":
+        need_upload = True
+    for file in files:
+        file[0].data["file"] = (
+            save_file(file[0].data["file"], file[0].data["name"])
+        ).as_posix()
+    return files, need_upload
+
+
+def save_file(file: bytes, file_name: str) -> Path:
+    file_path = cache_dir / file_name
+    file_path.write_bytes(file)
+    return file_path
 
 
 async def create_dc_to_qq(
@@ -66,14 +109,27 @@ async def create_dc_to_qq(
     seg_msg = event.get_message()
 
     messages = await MessageBuilder().build(seg_msg, bot, event)
+    combinable = qq_M(
+        [seg for seg in messages if seg.type in ["text", "image", "reply", "record"]]
+    )
+    videos = [qq_M(seg) for seg in messages if seg.type == "video"]
+    files, need_upload = await prepare_file(
+        qq_bot, [qq_M(seg) for seg in messages if seg.type == "file"]
+    )
 
     try_times = 1
     while True:
         try:
             sends = [
                 await qq_bot.send_group_msg(group_id=link.qq_group_id, message=message)
-                for message in messages
+                for message in (
+                    [combinable, *videos]
+                    if need_upload
+                    else [combinable, *videos, *files]
+                )
             ]
+            if need_upload:
+                await upload_group_file(qq_bot, link.qq_group_id, files)
             break
         except NameError as e:
             logger.warning(f"create_dc_to_qq() error: {e}, retry {try_times}")
@@ -146,7 +202,7 @@ class MessageBuilder:
 
     async def build(
         self, seg_msg: dc_M, bot: dc_Bot, event: GuildMessageCreateEvent
-    ) -> list[qq_M]:
+    ) -> qq_M:
         result: list[Coroutine[Any, Any, Optional[qq_MS]]] = [self.build_sender(event)]
 
         if event.content or event.embeds or event.components:
@@ -166,17 +222,8 @@ class MessageBuilder:
             result.append(self.handle_referenced_message(referenced_message))
 
         send_msg = await asyncio.gather(*result)
-        send_msg = [seg for seg in send_msg if seg is not None]
 
-        combinable = qq_M(
-            [seg for seg in send_msg if seg.type in ["text", "image", "reply"]]
-        )
-
-        records = [qq_M(seg) for seg in send_msg if seg.type == "record"]
-
-        videos = [qq_M(seg) for seg in send_msg if seg.type == "video"]
-
-        return [combinable, *records, *videos]
+        return qq_M([seg for seg in send_msg if seg is not None])
 
     def convert(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
@@ -205,9 +252,7 @@ class MessageBuilder:
             return qq_MS.video(await get_file_bytes(bot, attachment.url, discord_proxy))
         if "audio" in content_type and hasattr(attachment, "duration_secs"):
             return qq_MS.record(
-                await get_file_bytes(bot, attachment.url, discord_proxy)
-                if filetype.lower == "mp3"
-                else pydub_transform(
+                pydub_transform(
                     await get_file_bytes(bot, attachment.url, discord_proxy),
                     filetype,
                     "mp3",
@@ -216,7 +261,7 @@ class MessageBuilder:
         return qq_MS(
             "file",
             {
-                "file": f2s(await get_file_bytes(bot, attachment.url, discord_proxy)),
+                "file": await get_file_bytes(bot, attachment.url, discord_proxy),
                 "name": filename,
             },
         )
