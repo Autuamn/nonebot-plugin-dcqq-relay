@@ -1,7 +1,6 @@
 import asyncio
 from typing import Any, Callable, Optional
 from collections.abc import Coroutine
-
 from pathlib import Path
 
 from nonebot import logger
@@ -49,18 +48,14 @@ async def get_dc_role_name(bot: dc_Bot, guild_id: int, role_id: int) -> str:
     return role.name
 
 
-async def upload_group_file(bot: qq_Bot, group_id: int, files: list[qq_M]):
-    tasks = [
-        bot.call_api(
-            "upload_group_file",
-            group_id=group_id,
-            file=file[0].data["file"],
-            name=file[0].data["name"],
-            folder="",
-        )
-        for file in files
-    ]
-    asyncio.gather(*tasks)
+async def upload_group_file(bot: qq_Bot, group_id: int, file: qq_M):
+    await bot.call_api(
+        "upload_group_file",
+        group_id=group_id,
+        file=file[0].data["file"],
+        name=file[0].data["name"],
+        folder="",
+    )
 
 
 async def prepare_file(bot: qq_Bot, files: list[qq_M]) -> tuple[list[qq_M], bool]:
@@ -87,6 +82,51 @@ def save_file(file: bytes, file_name: str) -> Path:
     return file_path
 
 
+async def ensure_message(bot: dc_Bot, event: GuildMessageCreateEvent) -> dc_M:
+    attrs = ("attachment", "content", "embeds", "components", "sticker_items")
+    if not any(getattr(event, attr) for attr in attrs):
+        message_get = await bot.get_channel_message(
+            channel_id=event.channel_id, message_id=event.message_id
+        )
+        for attr in attrs:
+            setattr(event, attr, getattr(message_get, attr))
+    return event.get_message()
+
+
+def split_messages(messages: qq_M) -> tuple[list[qq_M], list[qq_M]]:
+    combinable, videos, files = qq_M(), [], []
+    for seg in messages:
+        if seg.type in ["text", "image", "reply", "record"]:
+            combinable.append(seg)
+        elif seg.type == "video":
+            videos.append(qq_M(seg))
+        elif seg.type == "file":
+            files.append(qq_M(seg))
+    return [combinable, *videos], files
+
+
+async def gather_send(
+    bot: qq_Bot,
+    qq_group_id: int,
+    msg_to_send: list[qq_M],
+    files: list[qq_M],
+) -> list[dict[str, Any]]:
+    tasks = []
+    files, need_upload = await prepare_file(bot, files)
+
+    if need_upload:
+        tasks.extend(upload_group_file(bot, qq_group_id, file) for file in files)
+    else:
+        msg_to_send += files
+    tasks = [
+        bot.send_group_msg(group_id=qq_group_id, message=message)
+        for message in msg_to_send
+    ] + tasks
+
+    sends = await asyncio.gather(*tasks)
+    return [send for send in sends if send is not None]
+
+
 async def create_dc_to_qq(
     bot: dc_Bot,
     event: GuildMessageCreateEvent,
@@ -94,55 +134,38 @@ async def create_dc_to_qq(
     channel_links: list[LinkWithWebhook],
 ):
     """discord 消息转发到 QQ"""
-    logger.debug("into create_dc_to_qq()")
+    logger.debug("create dc to qq: start")
     link = next(
         link for link in channel_links if link.dc_channel_id == event.channel_id
     )
-
-    attrs = ("content", "embeds", "components", "sticker_items")
-    if not any(getattr(event, attr) for attr in attrs):
-        message_get = await bot.get_channel_message(
-            channel_id=event.channel_id, message_id=event.message_id
-        )
-        for attr in attrs:
-            setattr(event, attr, getattr(message_get, attr))
-    seg_msg = event.get_message()
+    seg_msg = await ensure_message(bot, event)
 
     messages = await MessageBuilder().build(seg_msg, bot, event)
-    combinable = qq_M(
-        [seg for seg in messages if seg.type in ["text", "image", "reply", "record"]]
-    )
-    videos = [qq_M(seg) for seg in messages if seg.type == "video"]
-    files, need_upload = await prepare_file(
-        qq_bot, [qq_M(seg) for seg in messages if seg.type == "file"]
-    )
+    msg_to_send, files = split_messages(messages)
 
-    try_times = 1
-    while True:
+    for try_times in range(3):
         try:
-            sends = [
-                await qq_bot.send_group_msg(group_id=link.qq_group_id, message=message)
-                for message in (
-                    [combinable, *videos]
-                    if need_upload
-                    else [combinable, *videos, *files]
-                )
-            ]
-            if need_upload:
-                await upload_group_file(qq_bot, link.qq_group_id, files)
+            sends = await gather_send(
+                qq_bot,
+                link.qq_group_id,
+                msg_to_send,
+                files,
+            )
             break
         except NameError as e:
-            logger.warning(f"create_dc_to_qq() error: {e}, retry {try_times}")
-            if try_times >= 3:
-                raise e
-            try_times += 1
+            logger.warning(f"create dc to qq error: {e}, retry {try_times + 1}")
+            if try_times == 2:
+                continue
             await asyncio.sleep(5)
+    else:
+        logger.error("create dc to qq: failed")
+        return
 
     async with get_session() as session:
-        for send in sends:
-            session.add(MsgID(dcid=event.id, qqid=send["message_id"]))
+        session.add_all(MsgID(dcid=event.id, qqid=send["message_id"]) for send in sends)
         await session.commit()
-    logger.debug("finish create_dc_to_qq()")
+
+    logger.debug("create dc to qq done")
 
 
 async def delete_dc_to_qq(
@@ -150,12 +173,11 @@ async def delete_dc_to_qq(
     qq_bot: qq_Bot,
     just_delete: list,
 ):
-    logger.debug("into delete_dc_to_qq()")
+    logger.debug("delete dc to qq: start")
     if (id := event.id) in just_delete:
         just_delete.remove(id)
         return
-    try_times = 1
-    while True:
+    for try_times in range(3):
         try:
             async with get_session() as session:
                 if msgids := await session.scalars(
@@ -166,14 +188,15 @@ async def delete_dc_to_qq(
                         just_delete.append(msgid.qqid)
                         await session.delete(msgid)
                     await session.commit()
-            logger.debug("finish delete_dc_to_qq()")
+            logger.debug("delete dc to qq: done")
             break
         except UnboundLocalError or TypeError or NameError as e:
-            logger.warning(f"delete_dc_to_qq() error: {e}, retry {try_times}")
-            if try_times == 3:
-                raise e
-            try_times += 1
+            logger.warning(f"delete dc to qq error: {e}, retry {try_times + 1}")
+            if try_times == 2:
+                continue
             await asyncio.sleep(5)
+    else:
+        logger.warning("delete dc to qq: failed")
 
 
 class MessageBuilder:

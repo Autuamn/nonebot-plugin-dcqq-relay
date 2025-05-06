@@ -54,7 +54,7 @@ async def create_qq_to_dc(
     channel_links: list[LinkWithWebhook],
 ):
     """QQ 消息转发到 discord"""
-    logger.debug("into create_qq_to_dc()")
+    logger.debug("create qq to dc: start")
     link = next(link for link in channel_links if link.qq_group_id == event.group_id)
     builder = MessageBuilder()
 
@@ -69,8 +69,7 @@ async def create_qq_to_dc(
     )
     avatar = f"https://q.qlogo.cn/g?b=qq&nk={event.sender.user_id}&s=100"
 
-    try_times = 1
-    while True:
+    for try_times in range(3):
         try:
             send = await dc_bot.execute_webhook(
                 webhook_id=link.webhook_id,
@@ -83,18 +82,20 @@ async def create_qq_to_dc(
                 wait=True,
             )
             break
-        except (NameError, NetworkError) as e:
-            logger.warning(f"create_qq_to_dc() error: {e}, retry {try_times}")
-            if try_times == 3:
-                raise e
-            try_times += 1
+        except NameError or NetworkError as e:
+            logger.warning(f"create qq to dc error: {e}, retry {try_times + 1}")
+            if try_times >= 2:
+                continue
             await asyncio.sleep(5)
+    else:
+        logger.error("create qq to dc: failed")
+        return
 
     async with get_session() as session:
         session.add(MsgID(dcid=send.id, qqid=event.message_id))
         await session.commit()
 
-    logger.debug("finish create_qq_to_dc()")
+    logger.debug("create qq to dc: done")
 
 
 async def delete_qq_to_dc(
@@ -103,7 +104,7 @@ async def delete_qq_to_dc(
     channel_links: list[LinkWithWebhook],
     just_delete: list,
 ):
-    logger.debug("into delete_qq_to_dc()")
+    logger.debug("delete qq to dc: start")
     if (id := event.message_id) in just_delete:
         just_delete.remove(id)
         return
@@ -112,8 +113,7 @@ async def delete_qq_to_dc(
         for link in channel_links
         if link.qq_group_id == event.group_id
     )
-    try_times = 1
-    while True:
+    for try_times in range(3):
         try:
             async with get_session() as session:
                 if msgids := await session.scalars(
@@ -126,14 +126,15 @@ async def delete_qq_to_dc(
                         just_delete.append(msgid.dcid)
                         await session.delete(msgid)
                     await session.commit()
-            logger.debug("finish delete_qq_to_dc()")
+            logger.debug("delete qq to dc: done")
             break
         except UnboundLocalError or TypeError or NameError as e:
-            logger.warning(f"delete_qq_to_dc() error: {e}, retry {try_times}")
-            if try_times == 3:
-                raise e
-            try_times += 1
+            logger.warning(f"delete qq to dc error: {e}, retry {try_times + 1}")
+            if try_times >= 2:
+                continue
             await asyncio.sleep(5)
+    else:
+        logger.error("delete qq to dc: failed")
 
 
 class MsgResult:
