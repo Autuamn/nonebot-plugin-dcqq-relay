@@ -83,7 +83,7 @@ def save_file(file: bytes, file_name: str) -> Path:
 
 
 async def ensure_message(bot: dc_Bot, event: GuildMessageCreateEvent) -> dc_M:
-    attrs = ("attachment", "content", "embeds", "components", "sticker_items")
+    attrs = ("attachments", "content", "embeds", "components", "sticker_items")
     if not any(getattr(event, attr) for attr in attrs):
         message_get = await bot.get_channel_message(
             channel_id=event.channel_id, message_id=event.message_id
@@ -190,7 +190,7 @@ async def delete_dc_to_qq(
                     await session.commit()
             logger.debug("delete dc to qq: done")
             break
-        except UnboundLocalError or TypeError or NameError as e:
+        except (UnboundLocalError, TypeError, NameError) as e:
             logger.warning(f"delete dc to qq error: {e}, retry {try_times + 1}")
             if try_times == 2:
                 continue

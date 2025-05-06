@@ -82,7 +82,7 @@ async def create_qq_to_dc(
                 wait=True,
             )
             break
-        except NameError or NetworkError as e:
+        except (NameError, NetworkError) as e:
             logger.warning(f"create qq to dc error: {e}, retry {try_times + 1}")
             if try_times >= 2:
                 continue
@@ -128,7 +128,7 @@ async def delete_qq_to_dc(
                     await session.commit()
             logger.debug("delete qq to dc: done")
             break
-        except UnboundLocalError or TypeError or NameError as e:
+        except (UnboundLocalError, TypeError, NameError) as e:
             logger.warning(f"delete qq to dc error: {e}, retry {try_times + 1}")
             if try_times >= 2:
                 continue
