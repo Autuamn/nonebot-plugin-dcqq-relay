@@ -12,21 +12,26 @@ OneBot 实现众多，表现各有不同，我的测试环境为 [Lagrange.Onebo
 
 可以在指定的QQ群和 Discord 频道之间同步消息，只支持普通的文字频道，不支持帖子频道
 
-### 目前支持的消息
+### 消息支持情况
 
-- [x] 文字
-- [x] 图片
-- [x] 表情
-- [x] 回复消息
-- [x] 撤回消息
+❗✔️🟢🟡⚠️❌🔴
 
-### 尚未支持的消息
+|类型 | QQ to Discord | Discord to QQ | 备注 |
+|  -  | :-: | :-: | - |
+|文字 | 🟢 | 🟢 | 🟢支持      |
+|图片 | 🟢 | 🟢 | 🟡压缩为文字|
+|At   | 🟡 | 🟡 | ⚠️不良好    |
+|回复 | 🟢 | 🟢 |
+|撤回 | 🟢 | ⚠️ |
+|表情 | 🟡 | 🟡 |
+|贴纸 |     | 🟡 |
+|文件 | 🟢 | 🟢 |
+|视频 | 🟢 | 🟢 |
+|语音 | 🟢 | 🟢 |
+|Embed|     | ⚠️ |
+|xml  | ⚠️ |     |
+|json | ⚠️ |     |
 
-- [ ] 文件
-- [ ] 语音
-- [ ] 视频
-- [ ] ARK 消息
-- [ ] Embed 消息
 
 ## 安装
 
@@ -62,6 +67,32 @@ pip install git+https://github.com/Autuamn/nonebot-plugin-dcqq-relay.git@main
 
 ## 配置
 
+### 机器人权限
+
+> [!IMPORTANT]
+> 请在 Discord App 的 Bot 配置中打开 `Message Content Intent`：
+  ![Privileged Gateway Intentsp 配置](https://img.kookapp.cn/assets/2025-05/06/rNvTKVl7dl1mo0hr.png)
+  并在 discord adapter 的 bot 配置中添加 intent `"message_content": true`：
+> ```dotenv
+> DISCORD_BOTS='[{"token": "xxx",
+>     "intent": {
+>       "guild_messages": true,
+>       "message_content": true   <<--- 像这样
+>     },"application_commands": {"*": ["*"]}}]'
+> ```
+
+
+推荐权限：管理员
+
+最低权限：
+- QQ：
+  - 管理员（不给撤回功能将不正常）
+- Discord：
+  - Manage Messages（不给无法撤回）
+  - Mention Everyone（不给无法转发@全体成员）
+  - Manage Webhooks（不给要提供 Webhook）
+
+
 ### dcqq_relay_channel_links
 
 - 类型：`json`
@@ -89,8 +120,8 @@ dcqq_relay_channel_links='[
     }
 ]'
 ```
-
-**Webhook 的相关配置是可选的，不填插件会自动获取**
+> [!IMPORTANT]
+> Webhook 的相关配置是可选的，不填插件会自动获取，但是要给机器人 Manage Webhooks 权限
 
 关于 Webhook 是什么请看：[使用網絡鉤手（Webhooks）](https://support.discord.com/hc/zh-tw/articles/228383668-%E4%BD%BF%E7%94%A8%E7%B6%B2%E7%B5%A1%E9%89%A4%E6%89%8B-Webhooks)
 
