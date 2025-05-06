@@ -5,8 +5,8 @@ from nonebot import get_driver, logger, on, require
 from nonebot.adapters import Event
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
-    MessageCreateEvent,
-    MessageDeleteEvent,
+    GuildMessageCreateEvent,
+    GuildMessageDeleteEvent,
 )
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
@@ -18,6 +18,7 @@ from nonebot.rule import Rule, StartswithRule
 from nonebot.typing import T_State
 
 require("nonebot_plugin_orm")
+require("nonebot_plugin_localstore")
 
 from .config import Config, LinkWithoutWebhook, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
@@ -88,54 +89,37 @@ async def get_webhooks(bot: dc_Bot):
 
 
 @matcher.handle()
-async def create_message(
+async def message_relay(
     bot: Union[qq_Bot, dc_Bot],
-    event: Union[GroupMessageEvent, MessageCreateEvent],
+    event: Union[
+        GroupMessageEvent,
+        GuildMessageCreateEvent,
+        GroupRecallNoticeEvent,
+        GuildMessageDeleteEvent,
+    ],
 ):
-    logger.debug("into create_message()")
-    try_times = 1
-    while True:
+    logger.debug("message relay: start")
+    for try_times in range(3):
         try:
             if isinstance(bot, qq_Bot) and isinstance(event, GroupMessageEvent):
                 await create_qq_to_dc(bot, event, dc_bot, with_webhook_links)
-            elif isinstance(bot, dc_Bot) and isinstance(event, MessageCreateEvent):
+            elif isinstance(bot, dc_Bot) and isinstance(event, GuildMessageCreateEvent):
                 await create_dc_to_qq(bot, event, qq_bot, with_webhook_links)
-            else:
-                logger.error(
-                    "bot type and event type not match: "
-                    + f"bot - {bot.type}, event - {type(event)}"
-                )
-            break
-        except NameError as e:
-            logger.warning(f"create_message() error: {e}, retry {try_times}")
-            if try_times == 3:
-                raise e
-            try_times += 1
-            await asyncio.sleep(5)
-
-
-@matcher.handle()
-async def delete_message(
-    bot: Union[qq_Bot, dc_Bot],
-    event: Union[GroupRecallNoticeEvent, MessageDeleteEvent],
-):
-    logger.debug("into delete_message()")
-    try_times = 1
-    while True:
-        try:
-            if isinstance(bot, qq_Bot) and isinstance(event, GroupRecallNoticeEvent):
+            elif isinstance(bot, qq_Bot) and isinstance(event, GroupRecallNoticeEvent):
                 await delete_qq_to_dc(event, dc_bot, with_webhook_links, just_delete)
-            elif isinstance(bot, dc_Bot) and isinstance(event, MessageDeleteEvent):
+            elif isinstance(bot, dc_Bot) and isinstance(event, GuildMessageDeleteEvent):
                 await delete_dc_to_qq(event, qq_bot, just_delete)
             else:
                 logger.error(
                     "bot type and event type not match: "
                     + f"bot - {bot.type}, event - {type(event)}"
                 )
+            logger.debug("message relay: done")
             break
         except NameError as e:
-            logger.warning(f"delete_message() error: {e}, retry {try_times}")
+            logger.warning(f"message relay error: {e}, retry {try_times + 1}")
             if try_times == 3:
                 raise e
-            try_times += 1
             await asyncio.sleep(5)
+    else:
+        logger.error("message relay: failed")
