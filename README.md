@@ -14,8 +14,6 @@ OneBot 实现众多，表现各有不同，我的测试环境为 [Lagrange.Onebo
 
 ### 消息支持情况
 
-❗✔️🟢🟡⚠️❌🔴
-
 |类型 | QQ to Discord | Discord to QQ | 备注 |
 |  -  | :-: | :-: | - |
 |文字 | 🟢 | 🟢 | 🟢支持      |
