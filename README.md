@@ -65,6 +65,14 @@ pip install git+https://github.com/Autuamn/nonebot-plugin-dcqq-relay.git@main
 
 ## 配置
 
+### 数据库
+
+本插件使用 [nonebot-plugin-orm](https://github.com/nonebot/plugin-orm) 存储消息 ID
+
+仅简单测试过 SQLite、MySQL、PostgreSQL
+
+相关配置请看 [NoneBot-最佳实践-数据库](https://nonebot.dev/docs/best-practice/database/)
+
 ### 机器人权限
 
 > [!IMPORTANT]
@@ -129,7 +137,12 @@ Webhook URL 形如：
 `https://discord.com/api/webhooks/{webhook_id}/{webhook_token}`
 
 例如：
+```
 
+                                |     webhook_id    |                               webhook_token                        |
+https://discord.com/api/webhooks/1243529342621978694/kq1Vc3NsN4d3SB0MAusB-xbY_e8xMChQmxypIFna0c1lwQS-uL85fqupK2jFfkYtUR1h
+                                |-------------------|--------------------------------------------------------------------|
+```
 当 Webhook URL 为 `https://discord.com/api/webhooks/1243529342621978694/kq1Vc3NsN4d3SB0MAusB-xbY_e8xMChQmxypIFna0c1lwQS-uL85fqupK2jFfkYtUR1h` 时
 
 `1243529342621978694` 就是 `webhook_id`
