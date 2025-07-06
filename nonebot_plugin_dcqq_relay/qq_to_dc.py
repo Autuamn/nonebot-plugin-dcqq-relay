@@ -387,7 +387,11 @@ class MessageBuilder:
     async def file(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
     ) -> MsgResult:
-        filename = seg.data.get("file_name", "") or seg.data.get("file", "")
+        filename = (
+            seg.data.get("file_name", "")
+            or seg.data.get("name", "")
+            or seg.data.get("file", "")
+        )
 
         if "http" in seg.data.get("url", ""):
             content = await get_file_bytes(bot, seg.data["url"])
