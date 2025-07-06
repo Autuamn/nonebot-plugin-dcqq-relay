@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nonebot-plugin-dcqq-relay"
-version = "1.1.0"
+version = "1.1.1"
 description = "在QQ群与 Discord 之间同步消息的 nonebot2 插件"
 authors = ["Autuamn_End <autuamn@qq.com>"]
 license = "MIT"
