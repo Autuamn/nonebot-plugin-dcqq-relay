@@ -296,7 +296,7 @@ class MessageBuilder:
     ) -> MsgResult:
         face_id = str(seg.data["id"])
         emoji = qq_emoji_dict.get(face_id, f"QQemojiID:{face_id}")
-        return MsgResult(text=f"[{emoji}]")
+        return MsgResult(text=f"[{emoji}]", ensure=True)
 
     async def mface(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
