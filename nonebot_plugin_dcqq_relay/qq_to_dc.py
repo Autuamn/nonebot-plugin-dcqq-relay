@@ -289,7 +289,7 @@ class MessageBuilder:
         if not name:
             name = await get_qq_member_name(bot, event.group_id, qq)
 
-        return MsgResult(text=f"[{name}](mailto:{qq}@qq.com)[QQ:{qq}] ")
+        return MsgResult(text=f"[{name}](mailto:{qq}@qq.com)[QQ:{qq}] ", ensure=True)
 
     async def face(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
