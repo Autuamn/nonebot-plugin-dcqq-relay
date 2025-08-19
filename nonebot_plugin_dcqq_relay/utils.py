@@ -172,7 +172,7 @@ def pydub_transform(origin_bytes: bytes, input_type: str, output_type: str) -> b
 def skil_to_ogg(skil_bytes: bytes) -> bytes:
     output_buffer = BytesIO()
 
-    pcm_bytes = pysilk.decode(skil_bytes, True, sample_rate=44100)
+    pcm_bytes = pysilk.decode(skil_bytes, True, sample_rate=24000)
     audio = AudioSegment.from_file(BytesIO(pcm_bytes), format="wav")
     audio.export(output_buffer, format="ogg")
 
