@@ -7,7 +7,7 @@ ci:
   autoupdate_commit_msg: ":arrow_up: auto update by pre-commit hooks"
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.2
+    rev: v0.12.11
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -22,7 +22,7 @@ repos:
         stages: [pre-commit]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
