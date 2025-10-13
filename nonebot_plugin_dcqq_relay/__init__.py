@@ -20,7 +20,13 @@ from nonebot.typing import T_State
 require("nonebot_plugin_orm")
 require("nonebot_plugin_localstore")
 
-from .config import Config, LinkWithoutWebhook, LinkWithWebhook, plugin_config
+from .config import (
+    Config,
+    LinkWithWebhook,
+    channel_links as without_webhook_links,
+    unmatch_beginning,
+    only_to_me,
+)
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
 from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
 from .utils import check_messages, check_to_me, get_webhook
@@ -37,11 +43,7 @@ __plugin_meta__ = PluginMetadata(
 
 
 driver = get_driver()
-without_webhook_links: list[LinkWithoutWebhook] = plugin_config.dcqq_relay_channel_links
 with_webhook_links: list[LinkWithWebhook] = []
-discord_proxy = plugin_config.discord_proxy
-unmatch_beginning = plugin_config.dcqq_relay_unmatch_beginning
-
 just_delete = []
 
 
@@ -54,7 +56,7 @@ matcher = on(
     rule=(
         Rule(NotStartswithRule(tuple(unmatch_beginning)))
         & check_messages
-        & (check_to_me if plugin_config.dcqq_relay_only_to_me else None)
+        & (check_to_me if only_to_me else None)
     ),
     priority=2,
 )

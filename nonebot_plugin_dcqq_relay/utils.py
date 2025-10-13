@@ -22,10 +22,7 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.compat import model_dump
 
-from .config import LinkWithoutWebhook, LinkWithWebhook, plugin_config
-
-channel_links: list[LinkWithoutWebhook] = plugin_config.dcqq_relay_channel_links
-discord_proxy = plugin_config.discord_proxy
+from .config import LinkWithoutWebhook, LinkWithWebhook, channel_links
 
 
 async def check_messages(

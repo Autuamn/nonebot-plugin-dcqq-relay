@@ -24,11 +24,10 @@ from nonebot_plugin_orm import get_session
 from nonebot_plugin_localstore import get_plugin_cache_dir
 from sqlalchemy import select
 
-from .config import LinkWithWebhook, plugin_config
+from .config import LinkWithWebhook, discord_proxy
 from .model import MsgID
 from .utils import get_dc_member_name, get_file_bytes, pydub_transform
 
-discord_proxy = plugin_config.discord_proxy
 cache_dir = get_plugin_cache_dir()
 
 

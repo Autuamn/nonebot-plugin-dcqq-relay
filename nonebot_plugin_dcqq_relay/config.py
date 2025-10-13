@@ -1,6 +1,7 @@
 from typing import Optional
 
 from nonebot import get_plugin_config
+from nonebot.adapters.discord.config import Config as dc_Config
 from pydantic import BaseModel
 
 
@@ -26,7 +27,10 @@ class Config(BaseModel):
     dcqq_relay_unmatch_beginning: list[str] = ["/"]
     """不转发的消息开头"""
     dcqq_relay_only_to_me: bool = False
-    discord_proxy: Optional[str] = None
 
 
 plugin_config = get_plugin_config(Config)
+channel_links = plugin_config.dcqq_relay_channel_links
+unmatch_beginning = plugin_config.dcqq_relay_unmatch_beginning
+only_to_me = plugin_config.dcqq_relay_only_to_me
+discord_proxy = get_plugin_config(dc_Config).discord_proxy
