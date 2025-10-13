@@ -2,12 +2,11 @@ import asyncio
 import re
 from urllib.request import url2pathname
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 from collections.abc import Coroutine
 
 import filetype
 from nonebot import logger
-from nonebot.adapters import Bot
 from nonebot.adapters.discord import Bot as dc_Bot
 from nonebot.adapters.discord.api import Embed, EmbedAuthor, File
 from nonebot.adapters.discord.exception import NetworkError
@@ -22,7 +21,7 @@ from nonebot.adapters.onebot.v11.event import Reply
 from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
-from .config import LinkWithWebhook
+from .config import LinkWithWebhook, discord_proxy
 from .qq_emoji_dict import qq_emoji_dict
 from .model import MsgID
 from .utils import get_file_bytes, skil_to_ogg
@@ -36,15 +35,25 @@ async def get_qq_member_name(bot: qq_Bot, group_id: int, user_id: int) -> str:
     )["nickname"]
 
 
-async def build_dc_file(bot: Bot, file: str, url: str) -> File:
-    """获取文件，用于发送到 Discord"""
-    img_bytes = await get_file_bytes(bot, url)
-    if re.search(r"\.[a-z]+$", file):
-        filename = file
+def get_file_name(
+    seg: Union[str, MessageSegment], content: Optional[bytes] = None
+) -> str:
+    file: str = ""
+    if isinstance(seg, MessageSegment):
+        file = (
+            seg.data.get("file_name", "")
+            or seg.data.get("filename", "")
+            or seg.data.get("file", "")
+            or seg.data.get("name", "")
+        )
     else:
-        match = filetype.match(img_bytes)
+        file = seg
+
+    if content and not re.search(r"\.[a-z0-9]+$", file):
+        match = filetype.match(content)
         filename = file + ("." + match.extension) if match else ""
-    return File(content=img_bytes, filename=filename)
+        return filename
+    return file
 
 
 async def create_qq_to_dc(
@@ -306,16 +315,22 @@ class MessageBuilder:
         if data.get("summary") and data.get("url"):
             return MsgResult(
                 text=data["summary"],
-                file=await build_dc_file(bot, f"{data['summary']}.gif", data["url"]),
+                file=File(
+                    content=await get_file_bytes(bot, data["url"], discord_proxy),
+                    filename=f"{data['summary']}.gif",
+                ),
             )
 
         return MsgResult(
             text="[动画表情]",
-            file=await build_dc_file(
-                bot,
-                f"{data['id']}.gif",
-                "https://gxh.vip.qq.com/club/item/parcel/item/"
-                + f"{data['id'][:2]}/{data['id']}/raw300.gif",
+            file=File(
+                content=await get_file_bytes(
+                    bot,
+                    "https://gxh.vip.qq.com/club/item/parcel/item/"
+                    + f"{data['id'][:2]}/{data['id']}/raw300.gif",
+                    discord_proxy,
+                ),
+                filename=f"{data['id']}.gif",
             ),
         )
 
@@ -324,20 +339,24 @@ class MessageBuilder:
     ) -> MsgResult:
         return MsgResult(
             text=seg.data["summary"],
-            file=await build_dc_file(
-                bot,
-                f"{seg.data['summary']}.gif",
-                "https://gxh.vip.qq.com/club/item/parcel/item/"
-                + f"{seg.data['face_id'][:2]}/{seg.data['face_id']}/raw300.gif",
+            file=File(
+                content=await get_file_bytes(
+                    bot,
+                    "https://gxh.vip.qq.com/club/item/parcel/item/"
+                    + f"{seg.data['face_id'][:2]}/{seg.data['face_id']}/raw300.gif",
+                    discord_proxy,
+                ),
+                filename=f"{seg.data['summary']}.gif",
             ),
         )
 
     async def image(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
     ) -> MsgResult:
+        content = await get_file_bytes(bot, seg.data["url"], discord_proxy)
         return MsgResult(
             text="[图片]",
-            file=await build_dc_file(bot, seg.data["file"][-40:], seg.data["url"]),
+            file=File(content=content, filename=get_file_name(seg, content)),
         )
 
     async def record(
@@ -367,17 +386,19 @@ class MessageBuilder:
     async def video(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
     ) -> MsgResult:
-        filename = seg.data.get("file_name", "") or seg.data.get("file", "")
+        filename = get_file_name(seg)
         url = seg.data["url"]
 
         if path := seg.data.get("path", ""):
             content = Path(path).read_bytes()
-        elif re.match(r"[A-Z]:\\\\", url):
-            content = Path(url).read_bytes()
-        elif "http" in url:
+        elif re.search(r"^https?:\/\/", url):
             content = await get_file_bytes(bot, url)
+        elif (path := Path(url)) and path.is_file():
+            content = path.read_bytes()
         else:
-            return MsgResult(text=f"[{filename}]")
+            return MsgResult(text="[视频]")
+
+        filename = get_file_name(filename, content)
 
         return MsgResult(
             text=f"[{filename}]",
@@ -387,13 +408,9 @@ class MessageBuilder:
     async def file(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
     ) -> MsgResult:
-        filename = (
-            seg.data.get("file_name", "")
-            or seg.data.get("name", "")
-            or seg.data.get("file", "")
-        )
+        filename = get_file_name(seg)
 
-        if "http" in seg.data.get("url", ""):
+        if re.search(r"^https?:\/\/", seg.data.get("url", "")):
             content = await get_file_bytes(bot, seg.data["url"])
         elif file_id := seg.data.get("file_id", ""):
             file_info = await bot.call_api("get_file", file_id=file_id)
