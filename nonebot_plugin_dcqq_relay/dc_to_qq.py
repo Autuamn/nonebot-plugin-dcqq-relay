@@ -13,7 +13,13 @@ from nonebot.adapters.discord.message import (
     MessageSegment as dc_MS,
     Message as dc_M,
 )
-from nonebot.adapters.discord.api import UNSET, Attachment, StickerItem, MessageGet
+from nonebot.adapters.discord.api import (
+    UNSET,
+    Attachment,
+    StickerItem,
+    MessageGet,
+    Embed,
+)
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
     Message as qq_M,
@@ -231,8 +237,7 @@ class MessageBuilder:
             result.extend(self.convert(seg, bot, event) for seg in seg_msg)
 
         result.extend(
-            self.handle_attachment(attachment, bot, event)
-            for attachment in event.attachments
+            self.handle_attachment(attachment, bot) for attachment in event.attachments
         )
 
         if event.sticker_items:
@@ -258,9 +263,7 @@ class MessageBuilder:
 
         return res
 
-    async def handle_attachment(
-        self, attachment: Attachment, bot: dc_Bot, event: GuildMessageCreateEvent
-    ) -> qq_MS:
+    async def handle_attachment(self, attachment: Attachment, bot: dc_Bot) -> qq_MS:
         filename = attachment.filename
         content_type = (
             attachment.content_type if attachment.content_type is not UNSET else ""
@@ -336,7 +339,33 @@ class MessageBuilder:
     async def embed(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
     ) -> qq_MS:
-        return qq_MS.text(f"\n<Embed:{seg.data['embed'].title}>\n")
+        embed: Embed = seg.data["embed"]
+        parts: list[str] = []
+
+        if embed.author is not UNSET:
+            author = embed.author.name
+            if embed.author.url is not UNSET:
+                author += f"({embed.author.url}󠀠󠀠)"
+            parts.append(author + ":\n")
+
+        if embed.title is not UNSET:
+            title = embed.title
+            if embed.url is not UNSET:
+                title += f"({embed.url}󠀠󠀠)"
+            parts.append(title + "\n")
+
+        if embed.thumbnail is not UNSET:
+            parts.append(embed.thumbnail.url + "\n")
+        if embed.description is not UNSET:
+            parts.append(embed.description + "\n")
+
+        if embed.fields is not UNSET:
+            parts.extend(f"{field.name}\n{field.value}\n" for field in embed.fields)
+
+        if embed.image is not UNSET:
+            parts.append(embed.image.url + "\n")
+
+        return qq_MS.text("\n" + "".join(parts))
 
     async def component(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
