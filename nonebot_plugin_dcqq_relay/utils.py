@@ -1,6 +1,6 @@
 import re
 import ssl
-from typing import Optional, Union
+from typing import Optional, Union, Any
 
 import pysilk
 from pydub import AudioSegment
@@ -10,11 +10,14 @@ from nonebot import logger
 from nonebot.adapters import Bot
 from nonebot.internal.driver import Request
 from nonebot.adapters.discord import (
+    Adapter as dc_Adapter,
     Bot as dc_Bot,
     GuildMessageCreateEvent,
     GuildMessageDeleteEvent,
 )
-from nonebot.adapters.discord.api import UNSET, Missing
+from nonebot.adapters.discord.api import UNSET
+from nonebot.adapters.discord.api.model import SnowflakeType
+from nonebot.adapters.discord.api.request import _request
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     GroupMessageEvent,
@@ -73,23 +76,22 @@ async def check_to_me(
 
 
 async def get_dc_member_name(
-    bot: dc_Bot, guild_id: Missing[int], user_id: int
+    bot: dc_Bot, guild_id: int, user_id: int
 ) -> tuple[str, str]:
     try:
-        if guild_id is not UNSET:
-            member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
-            if (nick := member.nick) and nick is not UNSET:
-                return nick, member.user.username if member.user is not UNSET else ""
-            elif member.user is not UNSET and (global_name := member.user.global_name):
-                return global_name, member.user.username
-            else:
-                return "", str(user_id)
+        member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
+        if (nick := member.nick) and nick is not UNSET:
+            return nick, member.user.username if member.user is not UNSET else ""
+        elif member.user is not UNSET and (global_name := member.user.global_name):
+            return global_name, member.user.username
         else:
-            user = await bot.get_user(user_id=user_id)
-            return user.global_name or "", user.username
+            return "", str(user_id)
     except ActionFailed as e:
         if e.message == "Unknown User":
             return "(error:未知用户)", str(user_id)
+        elif e.message == "Unknown Guild":
+            user = await bot.get_user(user_id=user_id)
+            return user.global_name or "", user.username
         else:
             raise e
 
@@ -190,3 +192,16 @@ async def get_dc_member_avatar(bot: dc_Bot, guild_id: int, user_id: int) -> str:
         )
     else:
         return ""
+
+
+async def get_guild_preview(
+    adapter: dc_Adapter, bot: dc_Bot, guild_id: SnowflakeType
+) -> Any:
+    """https://discord.com/developers/docs/resources/guild#get-guild-preview"""
+    headers = {"Authorization": adapter.get_authorization(bot.bot_info)}
+    request = Request(
+        headers=headers,
+        method="GET",
+        url=adapter.base_url / f"guilds/{guild_id}/preview",
+    )
+    return await _request(adapter, bot, request)

@@ -2,8 +2,10 @@ import asyncio
 from typing import Any, Callable, Optional
 from collections.abc import Coroutine
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
 
 from nonebot import logger
+from nonebot.compat import type_validate_python
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     GuildMessageCreateEvent,
@@ -20,6 +22,7 @@ from nonebot.adapters.discord.api import (
     MessageGet,
     Embed,
 )
+from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
     Message as qq_M,
@@ -31,8 +34,13 @@ from nonebot_plugin_localstore import get_plugin_cache_dir
 from sqlalchemy import select
 
 from .config import LinkWithWebhook, discord_proxy
-from .model import MsgID
-from .utils import get_dc_member_name, get_file_bytes, pydub_transform
+from .model import MsgID, MessageSnapshots
+from .utils import (
+    get_dc_member_name,
+    get_file_bytes,
+    pydub_transform,
+    get_guild_preview,
+)
 
 cache_dir = get_plugin_cache_dir()
 
@@ -43,7 +51,7 @@ async def get_dc_channel_name(bot: dc_Bot, guild_id: int, channel_id: int) -> st
     return (
         channel.name
         if channel.name is not UNSET and channel.name is not None
-        else "(error:无名频道)"
+        else "(error:未知频道)"
     )
 
 
@@ -248,6 +256,11 @@ class MessageBuilder:
         if referenced_message := event.referenced_message:
             result.append(self.handle_referenced_message(referenced_message))
 
+        if (
+            message_reference := event.message_reference
+        ) and message_reference is not UNSET:
+            result.extend(self.handle_message_reference(bot, event))
+
         send_msg = await asyncio.gather(*result)
 
         return qq_M([seg for seg in send_msg if seg is not None])
@@ -303,6 +316,67 @@ class MessageBuilder:
                 select(MsgID.qqid).filter(MsgID.dcid == referenced.id).limit(1)
             ):
                 return qq_MS.reply(reply_id)
+
+    def handle_message_reference(
+        self, bot: dc_Bot, event: GuildMessageCreateEvent
+    ) -> list[Coroutine[Any, Any, Optional[qq_MS]]]:
+        result: list[Coroutine[Any, Any, Optional[qq_MS]]] = [
+            asyncio.sleep(0, qq_MS.text("↱ 已转发：\n"))
+        ]
+        if (
+            (message_reference := event.message_reference)
+            and message_reference is not UNSET
+            and hasattr(event, "message_snapshots")
+            and (
+                message := type_validate_python(
+                    MessageSnapshots, event.message_snapshots[0]
+                ).message
+            )
+        ):
+            event.guild_id = message_reference.guild_id
+
+            i_seg = dc_M._construct(message.content)
+            result.extend(self.convert(seg, bot, event) for seg in i_seg)
+
+            result.extend(
+                self.embed(seg, bot, event)
+                for seg in [dc_MS.embed(embed) for embed in message.embeds]
+            )
+
+            result.extend(
+                self.handle_attachment(attachment, bot)
+                for attachment in message.attachments
+            )
+
+            if message.sticker_items:
+                result.extend(
+                    self.handle_sticker(sticker) for sticker in message.sticker_items
+                )
+
+            result.append(self.build_reference_info(bot, event))
+
+        return result
+
+    async def build_reference_info(
+        self, bot: dc_Bot, event: GuildMessageCreateEvent
+    ) -> qq_MS:
+        try:
+            guild_name = (await get_guild_preview(bot.adapter, bot, event.guild_id))[
+                "name"
+            ] + " "
+        except ActionFailed as e:
+            if e.message == "Unknown Guild":
+                guild_name = ""
+            else:
+                raise e
+
+        return qq_MS.text(
+            "\n"
+            + guild_name
+            + datetime.fromisoformat(event.message_snapshots[0]["message"]["timestamp"])
+            .astimezone(timezone(timedelta(hours=8)))
+            .strftime("%Y/%m/%d %H:%M")
+        )
 
     async def build_sender(self, event: GuildMessageCreateEvent) -> qq_MS:
         return qq_MS.text(
