@@ -7,6 +7,7 @@ from pydub import AudioSegment
 from io import BytesIO
 
 from nonebot import logger
+from nonebot.compat import type_validate_python
 from nonebot.adapters import Bot
 from nonebot.internal.driver import Request
 from nonebot.adapters.discord import (
@@ -16,7 +17,7 @@ from nonebot.adapters.discord import (
     GuildMessageDeleteEvent,
 )
 from nonebot.adapters.discord.api import UNSET
-from nonebot.adapters.discord.api.model import SnowflakeType
+from nonebot.adapters.discord.api.model import SnowflakeType, Role
 from nonebot.adapters.discord.api.request import _request
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
@@ -205,3 +206,16 @@ async def get_guild_preview(
         url=adapter.base_url / f"guilds/{guild_id}/preview",
     )
     return await _request(adapter, bot, request)
+
+
+async def get_guild_role(
+    adapter: dc_Adapter, bot: dc_Bot, guild_id: SnowflakeType, role_id: SnowflakeType
+) -> Role:
+    """https://discord.com/developers/docs/resources/guild#get-guild-roles"""
+    headers = {"Authorization": adapter.get_authorization(bot.bot_info)}
+    request = Request(
+        headers=headers,
+        method="GET",
+        url=adapter.base_url / f"guilds/{guild_id}/roles/{role_id}",
+    )
+    return type_validate_python(Role, await _request(adapter, bot, request))

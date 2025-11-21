@@ -40,25 +40,28 @@ from .utils import (
     get_file_bytes,
     pydub_transform,
     get_guild_preview,
+    get_guild_role,
 )
 
 cache_dir = get_plugin_cache_dir()
 
 
-async def get_dc_channel_name(bot: dc_Bot, guild_id: int, channel_id: int) -> str:
-    channels = await bot.get_guild_channels(guild_id=guild_id)
-    channel = next(channel for channel in channels if channel.id == channel_id)
-    return (
-        channel.name
-        if channel.name is not UNSET and channel.name is not None
-        else "(error:未知频道)"
-    )
+async def get_dc_channel_name(bot: dc_Bot, channel_id: int) -> str:
+    try:
+        name = (await bot.get_channel(channel_id=channel_id)).name
+    except ActionFailed:
+        name = None
+
+    return name if isinstance(name, str) else "(error:未知频道)"
 
 
 async def get_dc_role_name(bot: dc_Bot, guild_id: int, role_id: int) -> str:
-    roles = await bot.get_guild_roles(guild_id=guild_id)
-    role = next(role for role in roles if role.id == role_id)
-    return role.name
+    try:
+        name = (await get_guild_role(bot.adapter, bot, guild_id, role_id)).name
+    except ActionFailed:
+        name = "(error:未知身份组)"
+
+    return name
 
 
 async def upload_group_file(bot: qq_Bot, group_id: int, file: qq_M):
@@ -479,10 +482,7 @@ class MessageBuilder:
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
     ) -> qq_MS:
         return qq_MS.text(
-            "#"
-            + await get_dc_channel_name(
-                bot, event.guild_id, int(seg.data["channel_id"])
-            )
+            "#" + await get_dc_channel_name(bot, int(seg.data["channel_id"]))
         )
 
     async def mention_everyone(
