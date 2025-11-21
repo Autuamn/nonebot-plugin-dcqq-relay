@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 from collections.abc import Coroutine
 from pathlib import Path
 from datetime import timezone, timedelta
@@ -220,7 +220,7 @@ class MessageBuilder:
         str,
         Callable[
             [dc_MS, dc_Bot, GuildMessageCreateEvent],
-            Coroutine[Any, Any, Optional[qq_MS]],
+            Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]],
         ],
     ]
 
@@ -242,7 +242,9 @@ class MessageBuilder:
     async def build(
         self, seg_msg: dc_M, bot: dc_Bot, event: GuildMessageCreateEvent
     ) -> qq_M:
-        result: list[Coroutine[Any, Any, Optional[qq_MS]]] = [self.build_sender(event)]
+        result: list[Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]] = [
+            self.build_sender(event)
+        ]
 
         if event.content or event.embeds or event.components:
             result.extend(self.convert(seg, bot, event) for seg in seg_msg)
@@ -269,11 +271,18 @@ class MessageBuilder:
 
         send_msg = await asyncio.gather(*result)
 
-        return qq_M([seg for seg in send_msg if seg is not None])
+        message = qq_M()
+        for seg in send_msg:
+            if isinstance(seg, qq_MS):
+                message.append(seg)
+            if isinstance(seg, qq_M):
+                message.extend(seg)
+
+        return message
 
     def convert(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
-    ) -> Coroutine[Any, Any, Optional[qq_MS]]:
+    ) -> Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]:
         seg_type = seg.type
         if seg_type in self._mapping:
             res = self._mapping[seg_type](seg, bot, event)
@@ -328,8 +337,8 @@ class MessageBuilder:
         message_snapshots: MessageSnapshots,
         bot: dc_Bot,
         event: GuildMessageCreateEventWithMessageSnapshots,
-    ) -> list[Coroutine[Any, Any, Optional[qq_MS]]]:
-        result: list[Coroutine[Any, Any, Optional[qq_MS]]] = [
+    ) -> list[Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]]:
+        result: list[Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]] = [
             asyncio.sleep(0, qq_MS.text("↱ 已转发：\n"))
         ]
         message = message_snapshots.message
@@ -417,34 +426,47 @@ class MessageBuilder:
 
     async def embed(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
-    ) -> qq_MS:
+    ) -> qq_M:
         embed: Embed = seg.data["embed"]
-        parts: list[str] = []
+        parts: qq_M = qq_M()
 
         if embed.author is not UNSET:
             author = embed.author.name
             if embed.author.url is not UNSET:
-                author += f"({embed.author.url}󠀠󠀠)"
+                author += f"({embed.author.url}\udb40\udc20)"
             parts.append(author + ":\n")
 
         if embed.title is not UNSET:
             title = embed.title
             if embed.url is not UNSET:
-                title += f"({embed.url}󠀠󠀠)"
+                title += f"({embed.url}\udb40\udc20)"
             parts.append(title + "\n")
 
         if embed.thumbnail is not UNSET:
             parts.append(embed.thumbnail.url + "\n")
+
         if embed.description is not UNSET:
-            parts.append(embed.description + "\n")
+            parts.append(embed.description.replace(")", "\udb40\udc20)") + "\n")
 
         if embed.fields is not UNSET:
-            parts.extend(f"{field.name}\n{field.value}\n" for field in embed.fields)
+            parts.extend(
+                qq_MS.text(f"{field.name}\n{field.value}\n") for field in embed.fields
+            )
 
         if embed.image is not UNSET:
-            parts.append(embed.image.url + "\n")
+            parts.append(
+                qq_MS.image(await get_file_bytes(bot, embed.image.url, discord_proxy))
+            )
+            parts.append("\n")
 
-        return qq_MS.text("\n" + "".join(parts))
+        if embed.video is not UNSET:
+            parts.append(
+                qq_MS.video(
+                    await get_file_bytes(bot, embed.video.proxy_url, discord_proxy)
+                )
+            )
+
+        return parts
 
     async def component(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
