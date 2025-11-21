@@ -4,6 +4,7 @@ from nonebot_plugin_orm import Model
 from sqlalchemy import BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
 from pydantic import BaseModel, Field
+from nonebot.adapters.discord.event import GuildMessageCreateEvent
 from nonebot.adapters.discord.api.types import Missing, UNSET, MessageFlag, MessageType
 from nonebot.adapters.discord.api.model import (
     Embed,
@@ -38,3 +39,7 @@ class MessageSnapshotMessage(BaseModel):
     stickers: Missing[list[Sticker]] = UNSET
     sticker_items: Missing[list[StickerItem]] = UNSET
     components: Missing[list[DirectComponent]] = UNSET
+
+
+class GuildMessageCreateEventWithMessageSnapshots(GuildMessageCreateEvent):
+    message_snapshots: list[MessageSnapshots]

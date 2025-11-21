@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, Callable, Optional
 from collections.abc import Coroutine
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import timezone, timedelta
 
 from nonebot import logger
 from nonebot.compat import type_validate_python
@@ -34,7 +34,7 @@ from nonebot_plugin_localstore import get_plugin_cache_dir
 from sqlalchemy import select
 
 from .config import LinkWithWebhook, discord_proxy
-from .model import MsgID, MessageSnapshots
+from .model import MsgID, GuildMessageCreateEventWithMessageSnapshots, MessageSnapshots
 from .utils import (
     get_dc_member_name,
     get_file_bytes,
@@ -259,10 +259,13 @@ class MessageBuilder:
         if referenced_message := event.referenced_message:
             result.append(self.handle_referenced_message(referenced_message))
 
-        if (
-            message_reference := event.message_reference
-        ) and message_reference is not UNSET:
-            result.extend(self.handle_message_reference(bot, event))
+        if hasattr(event, "message_snapshots"):
+            event = type_validate_python(
+                GuildMessageCreateEventWithMessageSnapshots, event.model_dump()
+            )
+            result.extend(
+                self.handle_message_snapshots(event.message_snapshots[0], bot, event)
+            )
 
         send_msg = await asyncio.gather(*result)
 
@@ -320,48 +323,45 @@ class MessageBuilder:
             ):
                 return qq_MS.reply(reply_id)
 
-    def handle_message_reference(
-        self, bot: dc_Bot, event: GuildMessageCreateEvent
+    def handle_message_snapshots(
+        self,
+        message_snapshots: MessageSnapshots,
+        bot: dc_Bot,
+        event: GuildMessageCreateEventWithMessageSnapshots,
     ) -> list[Coroutine[Any, Any, Optional[qq_MS]]]:
         result: list[Coroutine[Any, Any, Optional[qq_MS]]] = [
             asyncio.sleep(0, qq_MS.text("↱ 已转发：\n"))
         ]
+        message = message_snapshots.message
         if (
-            (message_reference := event.message_reference)
-            and message_reference is not UNSET
-            and hasattr(event, "message_snapshots")
-            and (
-                message := type_validate_python(
-                    MessageSnapshots, event.message_snapshots[0]
-                ).message
-            )
-        ):
+            message_reference := event.message_reference
+        ) and message_reference is not UNSET:
             event.guild_id = message_reference.guild_id
 
-            i_seg = dc_M._construct(message.content)
-            result.extend(self.convert(seg, bot, event) for seg in i_seg)
+        i_seg = dc_M._construct(message.content)
+        result.extend(self.convert(seg, bot, event) for seg in i_seg)
 
+        result.extend(
+            self.embed(seg, bot, event)
+            for seg in [dc_MS.embed(embed) for embed in message.embeds]
+        )
+
+        result.extend(
+            self.handle_attachment(attachment, bot)
+            for attachment in message.attachments
+        )
+
+        if message.sticker_items:
             result.extend(
-                self.embed(seg, bot, event)
-                for seg in [dc_MS.embed(embed) for embed in message.embeds]
+                self.handle_sticker(sticker) for sticker in message.sticker_items
             )
 
-            result.extend(
-                self.handle_attachment(attachment, bot)
-                for attachment in message.attachments
-            )
-
-            if message.sticker_items:
-                result.extend(
-                    self.handle_sticker(sticker) for sticker in message.sticker_items
-                )
-
-            result.append(self.build_reference_info(bot, event))
+        result.append(self.build_snapshots_info(bot, event))
 
         return result
 
-    async def build_reference_info(
-        self, bot: dc_Bot, event: GuildMessageCreateEvent
+    async def build_snapshots_info(
+        self, bot: dc_Bot, event: GuildMessageCreateEventWithMessageSnapshots
     ) -> qq_MS:
         try:
             guild_name = (await get_guild_preview(bot.adapter, bot, event.guild_id))[
@@ -373,12 +373,14 @@ class MessageBuilder:
             else:
                 raise e
 
+        timestamp = event.message_snapshots[0].message.timestamp
+
         return qq_MS.text(
             "\n"
             + guild_name
-            + datetime.fromisoformat(event.message_snapshots[0]["message"]["timestamp"])
-            .astimezone(timezone(timedelta(hours=8)))
-            .strftime("%Y/%m/%d %H:%M")
+            + timestamp.astimezone(timezone(timedelta(hours=8))).strftime(
+                "%Y/%m/%d %H:%M"
+            )
         )
 
     async def build_sender(self, event: GuildMessageCreateEvent) -> qq_MS:
