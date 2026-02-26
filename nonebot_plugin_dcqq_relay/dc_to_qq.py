@@ -324,9 +324,7 @@ class MessageBuilder:
         return qq_MS.text(f"[{sticker.name}]")
         # WIP
 
-    async def handle_referenced_message(
-        self, referenced: MessageGet
-    ) -> qq_MS | None:
+    async def handle_referenced_message(self, referenced: MessageGet) -> qq_MS | None:
         async with get_session() as session:
             if reply_id := await session.scalar(
                 select(MsgID.qqid).filter(MsgID.dcid == referenced.id).limit(1)

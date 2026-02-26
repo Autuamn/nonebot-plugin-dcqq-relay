@@ -36,9 +36,7 @@ async def get_qq_member_name(bot: qq_Bot, group_id: int, user_id: int) -> str:
     )["nickname"]
 
 
-def get_file_name(
-    seg: str | MessageSegment, content: bytes | None = None
-) -> str:
+def get_file_name(seg: str | MessageSegment, content: bytes | None = None) -> str:
     file: str = ""
     if isinstance(seg, MessageSegment):
         file = (

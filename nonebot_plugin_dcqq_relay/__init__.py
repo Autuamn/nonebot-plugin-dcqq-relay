@@ -93,7 +93,10 @@ async def get_webhooks(bot: dc_Bot):
 @matcher.handle()
 async def message_relay(
     bot: qq_Bot | dc_Bot,
-    event: GroupMessageEvent | GuildMessageCreateEvent | GroupRecallNoticeEvent | GuildMessageDeleteEvent,
+    event: GroupMessageEvent
+    | GuildMessageCreateEvent
+    | GroupRecallNoticeEvent
+    | GuildMessageDeleteEvent,
 ):
     logger.debug("message relay: start")
     for try_times in range(3):

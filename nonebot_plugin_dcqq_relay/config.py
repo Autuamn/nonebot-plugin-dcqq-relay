@@ -1,4 +1,3 @@
-
 from nonebot import get_plugin_config
 from nonebot.adapters.discord.config import Config as dc_Config
 from pydantic import BaseModel
