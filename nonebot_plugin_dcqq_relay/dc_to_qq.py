@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Callable, Coroutine
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,7 @@ from nonebot.adapters.discord.api import (
     Attachment,
     Embed,
     MessageGet,
+    MessageSnapshot,
     StickerItem,
     is_not_unset,
 )
@@ -29,13 +30,12 @@ from nonebot.adapters.onebot.v11 import (
     Message as qq_M,
     MessageSegment as qq_MS,
 )
-from nonebot.compat import type_validate_python
 from nonebot_plugin_localstore import get_plugin_cache_dir
 from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
 from .config import LinkWithWebhook, discord_proxy
-from .model import GuildMessageCreateEventWithMessageSnapshots, MessageSnapshots, MsgID
+from .model import MsgID
 from .utils import (
     get_dc_member_name,
     get_file_bytes,
@@ -263,10 +263,7 @@ class MessageBuilder:
         ):
             result.append(self.handle_referenced_message(referenced_message))
 
-        if hasattr(event, "message_snapshots"):
-            event = type_validate_python(
-                GuildMessageCreateEventWithMessageSnapshots, event.model_dump()
-            )
+        if is_not_unset(event.message_snapshots) and event.message_snapshots:
             result.extend(
                 self.handle_message_snapshots(event.message_snapshots[0], bot, event)
             )
@@ -334,9 +331,9 @@ class MessageBuilder:
 
     def handle_message_snapshots(
         self,
-        message_snapshots: MessageSnapshots,
+        message_snapshots: MessageSnapshot,
         bot: dc_Bot,
-        event: GuildMessageCreateEventWithMessageSnapshots,
+        event: GuildMessageCreateEvent,
     ) -> list[Coroutine[Any, Any, qq_M | qq_MS | None]]:
         result: list[Coroutine[Any, Any, qq_M | qq_MS | None]] = [
             asyncio.sleep(0, qq_MS.text("↱ 已转发：\n"))
@@ -367,24 +364,20 @@ class MessageBuilder:
                 self.handle_sticker(sticker) for sticker in message.sticker_items
             )
 
-        result.append(self.build_snapshots_info(bot, event))
+        result.append(self.build_snapshots_info(bot, event.guild_id, message.timestamp))
 
         return result
 
     async def build_snapshots_info(
-        self, bot: dc_Bot, event: GuildMessageCreateEventWithMessageSnapshots
+        self, bot: dc_Bot, guild_id: int, timestamp: datetime
     ) -> qq_MS:
         try:
-            guild_name = (
-                await bot.get_guild_preview(guild_id=event.guild_id)
-            ).name + " "
+            guild_name = (await bot.get_guild_preview(guild_id=guild_id)).name + " "
         except ActionFailed as e:
             if e.message == "Unknown Guild":
                 guild_name = ""
             else:
                 raise e
-
-        timestamp = event.message_snapshots[0].message.timestamp
 
         return qq_MS.text(
             "\n"
