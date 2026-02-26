@@ -5,11 +5,12 @@ import ssl
 from nonebot import logger
 from nonebot.adapters import Bot
 from nonebot.adapters.discord import (
+    UNSET,
     Bot as dc_Bot,
     GuildMessageCreateEvent,
     GuildMessageDeleteEvent,
+    is_not_unset,
 )
-from nonebot.adapters.discord.api import UNSET
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     GroupMessageEvent,
@@ -118,7 +119,7 @@ async def get_webhook(bot: dc_Bot, link: LinkWithoutWebhook) -> LinkWithWebhook 
             ),
             None,
         )
-        if bot_webhook and bot_webhook.token:
+        if bot_webhook and is_not_unset(bot_webhook.token):
             return build_link(link, bot_webhook.id, bot_webhook.token)
     except Exception as e:
         logger.error(
@@ -128,7 +129,7 @@ async def get_webhook(bot: dc_Bot, link: LinkWithoutWebhook) -> LinkWithWebhook 
         create_webhook = await bot.create_webhook(
             channel_id=link.dc_channel_id, name=str(link.dc_channel_id)
         )
-        if create_webhook.token:
+        if is_not_unset(create_webhook.token):
             return build_link(link, create_webhook.id, create_webhook.token)
     except Exception as e:
         logger.error(
