@@ -1,5 +1,4 @@
 import asyncio
-from typing import Union
 
 from nonebot import get_driver, logger, on, require
 from nonebot.adapters import Event
@@ -24,8 +23,8 @@ from .config import (
     Config,
     LinkWithWebhook,
     channel_links as without_webhook_links,
-    unmatch_beginning,
     only_to_me,
+    unmatch_beginning,
 )
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
 from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
@@ -92,13 +91,13 @@ async def get_webhooks(bot: dc_Bot):
 
 @matcher.handle()
 async def message_relay(
-    bot: Union[qq_Bot, dc_Bot],
-    event: Union[
-        GroupMessageEvent,
-        GuildMessageCreateEvent,
-        GroupRecallNoticeEvent,
-        GuildMessageDeleteEvent,
-    ],
+    bot: qq_Bot | dc_Bot,
+    event: (
+        GroupMessageEvent
+        | GuildMessageCreateEvent
+        | GroupRecallNoticeEvent
+        | GuildMessageDeleteEvent
+    ),
 ):
     logger.debug("message relay: start")
     for try_times in range(3):

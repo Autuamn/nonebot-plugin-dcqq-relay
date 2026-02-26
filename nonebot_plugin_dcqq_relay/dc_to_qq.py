@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Callable, Optional, Union
+from typing import Any
+from collections.abc import Callable
 from collections.abc import Coroutine
 from pathlib import Path
 from datetime import timezone, timedelta
@@ -220,7 +221,7 @@ class MessageBuilder:
         str,
         Callable[
             [dc_MS, dc_Bot, GuildMessageCreateEvent],
-            Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]],
+            Coroutine[Any, Any, qq_M | qq_MS | None],
         ],
     ]
 
@@ -242,7 +243,7 @@ class MessageBuilder:
     async def build(
         self, seg_msg: dc_M, bot: dc_Bot, event: GuildMessageCreateEvent
     ) -> qq_M:
-        result: list[Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]] = [
+        result: list[Coroutine[Any, Any, qq_M | qq_MS | None]] = [
             self.build_sender(event)
         ]
 
@@ -282,7 +283,7 @@ class MessageBuilder:
 
     def convert(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
-    ) -> Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]:
+    ) -> Coroutine[Any, Any, qq_M | qq_MS | None]:
         seg_type = seg.type
         if seg_type in self._mapping:
             res = self._mapping[seg_type](seg, bot, event)
@@ -319,13 +320,11 @@ class MessageBuilder:
             },
         )
 
-    async def handle_sticker(self, sticker: StickerItem) -> Optional[qq_MS]:
+    async def handle_sticker(self, sticker: StickerItem) -> qq_MS | None:
         return qq_MS.text(f"[{sticker.name}]")
         # WIP
 
-    async def handle_referenced_message(
-        self, referenced: MessageGet
-    ) -> Optional[qq_MS]:
+    async def handle_referenced_message(self, referenced: MessageGet) -> qq_MS | None:
         async with get_session() as session:
             if reply_id := await session.scalar(
                 select(MsgID.qqid).filter(MsgID.dcid == referenced.id).limit(1)
@@ -337,8 +336,8 @@ class MessageBuilder:
         message_snapshots: MessageSnapshots,
         bot: dc_Bot,
         event: GuildMessageCreateEventWithMessageSnapshots,
-    ) -> list[Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]]:
-        result: list[Coroutine[Any, Any, Optional[Union[qq_M, qq_MS]]]] = [
+    ) -> list[Coroutine[Any, Any, qq_M | qq_MS | None]]:
+        result: list[Coroutine[Any, Any, qq_M | qq_MS | None]] = [
             asyncio.sleep(0, qq_MS.text("↱ 已转发：\n"))
         ]
         message = message_snapshots.message
@@ -406,7 +405,7 @@ class MessageBuilder:
 
     async def attachment(
         self, seg: dc_MS, bot: dc_Bot, event: GuildMessageCreateEvent
-    ) -> Optional[qq_MS]:
+    ) -> qq_MS | None:
         filename = seg.data["attachment"].filename
         if hasattr(seg.data["attachment"], "duration_secs"):
             return

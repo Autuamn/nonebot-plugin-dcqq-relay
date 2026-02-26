@@ -1,15 +1,10 @@
+from io import BytesIO
 import re
 import ssl
-from typing import Optional, Union, Any
-
-import pysilk
-from pydub import AudioSegment
-from io import BytesIO
+from typing import Any
 
 from nonebot import logger
-from nonebot.compat import type_validate_python
 from nonebot.adapters import Bot
-from nonebot.internal.driver import Request
 from nonebot.adapters.discord import (
     Adapter as dc_Adapter,
     Bot as dc_Bot,
@@ -17,25 +12,28 @@ from nonebot.adapters.discord import (
     GuildMessageDeleteEvent,
 )
 from nonebot.adapters.discord.api import UNSET
-from nonebot.adapters.discord.api.model import SnowflakeType, Role
+from nonebot.adapters.discord.api.model import Role, SnowflakeType
 from nonebot.adapters.discord.api.request import _request
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     GroupMessageEvent,
     GroupRecallNoticeEvent,
 )
-from nonebot.compat import model_dump
+from nonebot.compat import model_dump, type_validate_python
+from nonebot.internal.driver import Request
+from pydub import AudioSegment
+import pysilk
 
 from .config import LinkWithoutWebhook, LinkWithWebhook, channel_links
 
 
 async def check_messages(
-    event: Union[
-        GroupMessageEvent,
-        GuildMessageCreateEvent,
-        GroupRecallNoticeEvent,
-        GuildMessageDeleteEvent,
-    ],
+    event: (
+        GroupMessageEvent
+        | GuildMessageCreateEvent
+        | GroupRecallNoticeEvent
+        | GuildMessageDeleteEvent
+    ),
 ) -> bool:
     """检查消息"""
     logger.debug("into check_messages()")
@@ -64,14 +62,14 @@ async def check_messages(
 
 
 async def check_to_me(
-    event: Union[
-        GroupMessageEvent,
-        GuildMessageCreateEvent,
-        GroupRecallNoticeEvent,
-        GuildMessageDeleteEvent,
-    ],
+    event: (
+        GroupMessageEvent
+        | GuildMessageCreateEvent
+        | GroupRecallNoticeEvent
+        | GuildMessageDeleteEvent
+    ),
 ) -> bool:
-    if isinstance(event, (GroupMessageEvent, GuildMessageCreateEvent)):
+    if isinstance(event, GroupMessageEvent | GuildMessageCreateEvent):
         return event.to_me
     return True
 
@@ -97,7 +95,7 @@ async def get_dc_member_name(
             raise e
 
 
-async def get_file_bytes(bot: Bot, url: str, proxy: Optional[str] = None) -> bytes:
+async def get_file_bytes(bot: Bot, url: str, proxy: str | None = None) -> bytes:
     try:
         resp = await bot.adapter.request(Request("GET", url, proxy=proxy))
         if isinstance(resp.content, bytes):
@@ -111,9 +109,7 @@ async def get_file_bytes(bot: Bot, url: str, proxy: Optional[str] = None) -> byt
         return await get_file_bytes(bot, url, proxy)
 
 
-async def get_webhook(
-    bot: dc_Bot, link: LinkWithoutWebhook
-) -> Union[LinkWithWebhook, int]:
+async def get_webhook(bot: dc_Bot, link: LinkWithoutWebhook) -> LinkWithWebhook | int:
     if link.webhook_id and link.webhook_token:
         return LinkWithWebhook(**model_dump(link))
     try:
