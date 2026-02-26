@@ -19,10 +19,10 @@ nonebot-plugin-localstore = "^0.7.4"
 audioop-lts = { python = "^3.13", version = "*" }
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.12.2"
-black = "^25.1.0"
-nonemoji = "^0.1.2"
-pre-commit = "^4.2.0"
+ruff = "^0.15.2"
+black = "^26.1.0"
+nonemoji = "^0.1.4"
+pre-commit = "^4.5.1"
 
 [tool.ruff]
 line-length = 88
