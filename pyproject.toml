@@ -7,16 +7,16 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
-nonebot2 = {extras = ["aiohttp", "fastapi"], version = "^2.2.1"}
+python = "^3.10"
+nonebot2 = { extras = ["aiohttp", "fastapi"], version = "^2.2.1" }
 nonebot-adapter-onebot = "^2.4.3"
 nonebot-adapter-discord = "^0.1.8"
-nonebot-plugin-orm = {extras = ["default"], version = "^0.8.1"}
+nonebot-plugin-orm = { extras = ["default"], version = "^0.8.1" }
 filetype = "^1.2.0"
 pydub = "^0.25.1"
 pysilk-mod = "^1.6.4"
 nonebot-plugin-localstore = "^0.7.4"
-audioop-lts = {python = "^3.13", version = "*"}
+audioop-lts = { python = "^3.13", version = "*" }
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.12.2"
@@ -26,14 +26,30 @@ pre-commit = "^4.2.0"
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.format]
 line-ending = "lf"
 
 [tool.ruff.lint]
-select = ["F", "W", "E", "UP", "ASYNC", "B", "C4", "T10", "T20", "PYI", "PT", "Q", "SIM", "TID", "RUF",]
-ignore = ["E402", "B008", "B030", "RUF001", "RUF002", "RUF003",]
+select = [
+    "F",
+    "W",
+    "E",
+    "UP",
+    "ASYNC",
+    "B",
+    "C4",
+    "T10",
+    "T20",
+    "PYI",
+    "PT",
+    "Q",
+    "SIM",
+    "TID",
+    "RUF",
+]
+ignore = ["E402", "B008", "B030", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
@@ -62,7 +78,7 @@ reportPrivateImportUsage = false
 reportShadowedImports = false
 disableBytesTypePromotions = true
 pythonPlatform = "All"
-pythonVersion = "3.9"
+pythonVersion = "3.10"
 
 [build-system]
 requires = ["poetry_core>=1.0.0"]
