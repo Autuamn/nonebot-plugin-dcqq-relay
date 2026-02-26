@@ -1,6 +1,6 @@
 import re
 import ssl
-from typing import Optional, Union, Any
+from typing import Any
 
 import pysilk
 from pydub import AudioSegment
@@ -30,12 +30,7 @@ from .config import LinkWithoutWebhook, LinkWithWebhook, channel_links
 
 
 async def check_messages(
-    event: Union[
-        GroupMessageEvent,
-        GuildMessageCreateEvent,
-        GroupRecallNoticeEvent,
-        GuildMessageDeleteEvent,
-    ],
+    event: GroupMessageEvent | GuildMessageCreateEvent | GroupRecallNoticeEvent | GuildMessageDeleteEvent,
 ) -> bool:
     """检查消息"""
     logger.debug("into check_messages()")
@@ -64,12 +59,7 @@ async def check_messages(
 
 
 async def check_to_me(
-    event: Union[
-        GroupMessageEvent,
-        GuildMessageCreateEvent,
-        GroupRecallNoticeEvent,
-        GuildMessageDeleteEvent,
-    ],
+    event: GroupMessageEvent | GuildMessageCreateEvent | GroupRecallNoticeEvent | GuildMessageDeleteEvent,
 ) -> bool:
     if isinstance(event, (GroupMessageEvent, GuildMessageCreateEvent)):
         return event.to_me
@@ -97,7 +87,7 @@ async def get_dc_member_name(
             raise e
 
 
-async def get_file_bytes(bot: Bot, url: str, proxy: Optional[str] = None) -> bytes:
+async def get_file_bytes(bot: Bot, url: str, proxy: str | None = None) -> bytes:
     try:
         resp = await bot.adapter.request(Request("GET", url, proxy=proxy))
         if isinstance(resp.content, bytes):
@@ -113,7 +103,7 @@ async def get_file_bytes(bot: Bot, url: str, proxy: Optional[str] = None) -> byt
 
 async def get_webhook(
     bot: dc_Bot, link: LinkWithoutWebhook
-) -> Union[LinkWithWebhook, int]:
+) -> LinkWithWebhook | int:
     if link.webhook_id and link.webhook_token:
         return LinkWithWebhook(**model_dump(link))
     try:

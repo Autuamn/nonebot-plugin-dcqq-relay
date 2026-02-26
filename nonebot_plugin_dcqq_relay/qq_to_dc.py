@@ -2,7 +2,8 @@ import asyncio
 import re
 from urllib.request import url2pathname
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any
+from collections.abc import Callable
 from collections.abc import Coroutine
 
 import filetype
@@ -36,7 +37,7 @@ async def get_qq_member_name(bot: qq_Bot, group_id: int, user_id: int) -> str:
 
 
 def get_file_name(
-    seg: Union[str, MessageSegment], content: Optional[bytes] = None
+    seg: str | MessageSegment, content: bytes | None = None
 ) -> str:
     file: str = ""
     if isinstance(seg, MessageSegment):
@@ -149,10 +150,10 @@ async def delete_qq_to_dc(
 class MsgResult:
     """消息处理结果容器"""
 
-    embed: Optional[Embed]
+    embed: Embed | None
     ensure_text: bool
-    file: Optional[File]
-    text: Optional[str]
+    file: File | None
+    text: str | None
 
     __slots__ = ("embed", "ensure_text", "file", "text")
 

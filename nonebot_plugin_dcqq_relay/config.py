@@ -1,4 +1,3 @@
-from typing import Optional
 
 from nonebot import get_plugin_config
 from nonebot.adapters.discord.config import Config as dc_Config
@@ -12,8 +11,8 @@ class Link(BaseModel):
 
 
 class LinkWithoutWebhook(Link):
-    webhook_id: Optional[int] = None
-    webhook_token: Optional[str] = None
+    webhook_id: int | None = None
+    webhook_token: str | None = None
 
 
 class LinkWithWebhook(Link):

@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 from nonebot_plugin_orm import Model
 from sqlalchemy import BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
@@ -32,7 +31,7 @@ class MessageSnapshotMessage(BaseModel):
     embeds: list[Embed]
     attachments: list[Attachment]
     timestamp: datetime.datetime
-    edited_timestamp: Optional[datetime.datetime] = Field(...)
+    edited_timestamp: datetime.datetime | None = Field(...)
     flags: Missing[MessageFlag] = UNSET
     mentions: list[User]
     mention_roles: Missing[list[str]] = UNSET
