@@ -28,10 +28,12 @@ from .config import LinkWithoutWebhook, LinkWithWebhook, channel_links
 
 
 async def check_messages(
-    event: GroupMessageEvent
-    | GuildMessageCreateEvent
-    | GroupRecallNoticeEvent
-    | GuildMessageDeleteEvent,
+    event: (
+        GroupMessageEvent
+        | GuildMessageCreateEvent
+        | GroupRecallNoticeEvent
+        | GuildMessageDeleteEvent
+    ),
 ) -> bool:
     """检查消息"""
     logger.debug("into check_messages()")
@@ -60,10 +62,12 @@ async def check_messages(
 
 
 async def check_to_me(
-    event: GroupMessageEvent
-    | GuildMessageCreateEvent
-    | GroupRecallNoticeEvent
-    | GuildMessageDeleteEvent,
+    event: (
+        GroupMessageEvent
+        | GuildMessageCreateEvent
+        | GroupRecallNoticeEvent
+        | GuildMessageDeleteEvent
+    ),
 ) -> bool:
     if isinstance(event, GroupMessageEvent | GuildMessageCreateEvent):
         return event.to_me
