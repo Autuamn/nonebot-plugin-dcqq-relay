@@ -1,47 +1,44 @@
 import asyncio
-from typing import Any
-from collections.abc import Callable
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
+from datetime import timedelta, timezone
 from pathlib import Path
-from datetime import timezone, timedelta
+from typing import Any
 
 from nonebot import logger
-from nonebot.compat import type_validate_python
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     GuildMessageCreateEvent,
     GuildMessageDeleteEvent,
 )
-from nonebot.adapters.discord.message import (
-    MessageSegment as dc_MS,
-    Message as dc_M,
-)
 from nonebot.adapters.discord.api import (
     UNSET,
     Attachment,
-    StickerItem,
-    MessageGet,
     Embed,
+    MessageGet,
+    StickerItem,
 )
 from nonebot.adapters.discord.exception import ActionFailed
+from nonebot.adapters.discord.message import (
+    Message as dc_M,
+    MessageSegment as dc_MS,
+)
+from nonebot.adapters.onebot.utils import f2s
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
     Message as qq_M,
     MessageSegment as qq_MS,
 )
-from nonebot.adapters.onebot.utils import f2s
-from nonebot_plugin_orm import get_session
+from nonebot.compat import type_validate_python
 from nonebot_plugin_localstore import get_plugin_cache_dir
+from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
 from .config import LinkWithWebhook, discord_proxy
-from .model import MsgID, GuildMessageCreateEventWithMessageSnapshots, MessageSnapshots
+from .model import GuildMessageCreateEventWithMessageSnapshots, MessageSnapshots, MsgID
 from .utils import (
     get_dc_member_name,
     get_file_bytes,
     pydub_transform,
-    get_guild_preview,
-    get_guild_role,
 )
 
 cache_dir = get_plugin_cache_dir()
@@ -58,7 +55,7 @@ async def get_dc_channel_name(bot: dc_Bot, channel_id: int) -> str:
 
 async def get_dc_role_name(bot: dc_Bot, guild_id: int, role_id: int) -> str:
     try:
-        name = (await get_guild_role(bot.adapter, bot, guild_id, role_id)).name
+        name = (await bot.get_guild_role(guild_id=guild_id, role_id=role_id)).name
     except ActionFailed:
         name = "(error:未知身份组)"
 
@@ -372,9 +369,9 @@ class MessageBuilder:
         self, bot: dc_Bot, event: GuildMessageCreateEventWithMessageSnapshots
     ) -> qq_MS:
         try:
-            guild_name = (await get_guild_preview(bot.adapter, bot, event.guild_id))[
-                "name"
-            ] + " "
+            guild_name = (
+                await bot.get_guild_preview(guild_id=event.guild_id)
+            ).name + " "
         except ActionFailed as e:
             if e.message == "Unknown Guild":
                 guild_name = ""
