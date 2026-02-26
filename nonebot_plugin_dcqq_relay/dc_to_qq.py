@@ -16,6 +16,7 @@ from nonebot.adapters.discord.api import (
     Embed,
     MessageGet,
     StickerItem,
+    is_not_unset,
 )
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.discord.message import (
@@ -251,12 +252,15 @@ class MessageBuilder:
             self.handle_attachment(attachment, bot) for attachment in event.attachments
         )
 
-        if event.sticker_items:
+        if is_not_unset(event.sticker_items):
             result.extend(
                 self.handle_sticker(sticker) for sticker in event.sticker_items
             )
 
-        if referenced_message := event.referenced_message:
+        if (
+            is_not_unset(referenced_message := event.referenced_message)
+            and referenced_message is not None
+        ):
             result.append(self.handle_referenced_message(referenced_message))
 
         if hasattr(event, "message_snapshots"):
@@ -339,8 +343,10 @@ class MessageBuilder:
         ]
         message = message_snapshots.message
         if (
-            message_reference := event.message_reference
-        ) and message_reference is not UNSET:
+            (message_reference := event.message_reference)
+            and is_not_unset(message_reference)
+            and is_not_unset(message_reference.guild_id)
+        ):
             event.guild_id = message_reference.guild_id
 
         i_seg = dc_M._construct(message.content)
@@ -356,7 +362,7 @@ class MessageBuilder:
             for attachment in message.attachments
         )
 
-        if message.sticker_items:
+        if is_not_unset(message.sticker_items):
             result.extend(
                 self.handle_sticker(sticker) for sticker in message.sticker_items
             )
@@ -455,7 +461,7 @@ class MessageBuilder:
             )
             parts.append("\n")
 
-        if embed.video is not UNSET:
+        if is_not_unset(embed.video) and is_not_unset(embed.video.proxy_url):
             parts.append(
                 qq_MS.video(
                     await get_file_bytes(bot, embed.video.proxy_url, discord_proxy)
