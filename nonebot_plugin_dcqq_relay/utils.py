@@ -1,15 +1,10 @@
+from io import BytesIO
 import re
 import ssl
 from typing import Any
 
-import pysilk
-from pydub import AudioSegment
-from io import BytesIO
-
 from nonebot import logger
-from nonebot.compat import type_validate_python
 from nonebot.adapters import Bot
-from nonebot.internal.driver import Request
 from nonebot.adapters.discord import (
     Adapter as dc_Adapter,
     Bot as dc_Bot,
@@ -17,14 +12,17 @@ from nonebot.adapters.discord import (
     GuildMessageDeleteEvent,
 )
 from nonebot.adapters.discord.api import UNSET
-from nonebot.adapters.discord.api.model import SnowflakeType, Role
+from nonebot.adapters.discord.api.model import Role, SnowflakeType
 from nonebot.adapters.discord.api.request import _request
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     GroupMessageEvent,
     GroupRecallNoticeEvent,
 )
-from nonebot.compat import model_dump
+from nonebot.compat import model_dump, type_validate_python
+from nonebot.internal.driver import Request
+from pydub import AudioSegment
+import pysilk
 
 from .config import LinkWithoutWebhook, LinkWithWebhook, channel_links
 
@@ -67,7 +65,7 @@ async def check_to_me(
     | GroupRecallNoticeEvent
     | GuildMessageDeleteEvent,
 ) -> bool:
-    if isinstance(event, (GroupMessageEvent, GuildMessageCreateEvent)):
+    if isinstance(event, GroupMessageEvent | GuildMessageCreateEvent):
         return event.to_me
     return True
 
