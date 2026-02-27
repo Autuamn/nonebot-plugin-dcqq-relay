@@ -1,47 +1,44 @@
 import asyncio
-from typing import Any
-from collections.abc import Callable
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from datetime import timezone, timedelta
+from typing import Any
 
 from nonebot import logger
-from nonebot.compat import type_validate_python
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     GuildMessageCreateEvent,
     GuildMessageDeleteEvent,
 )
-from nonebot.adapters.discord.message import (
-    MessageSegment as dc_MS,
-    Message as dc_M,
-)
 from nonebot.adapters.discord.api import (
-    UNSET,
     Attachment,
-    StickerItem,
-    MessageGet,
     Embed,
+    MessageGet,
+    MessageSnapshot,
+    StickerItem,
+    is_not_unset,
 )
 from nonebot.adapters.discord.exception import ActionFailed
+from nonebot.adapters.discord.message import (
+    Message as dc_M,
+    MessageSegment as dc_MS,
+)
+from nonebot.adapters.onebot.utils import f2s
 from nonebot.adapters.onebot.v11 import (
     Bot as qq_Bot,
     Message as qq_M,
     MessageSegment as qq_MS,
 )
-from nonebot.adapters.onebot.utils import f2s
-from nonebot_plugin_orm import get_session
 from nonebot_plugin_localstore import get_plugin_cache_dir
+from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
 from .config import LinkWithWebhook, discord_proxy
-from .model import MsgID, GuildMessageCreateEventWithMessageSnapshots, MessageSnapshots
+from .model import MsgID
 from .utils import (
     get_dc_member_name,
     get_file_bytes,
     pydub_transform,
-    get_guild_preview,
-    get_guild_role,
 )
 
 cache_dir = get_plugin_cache_dir()
@@ -58,7 +55,7 @@ async def get_dc_channel_name(bot: dc_Bot, channel_id: int) -> str:
 
 async def get_dc_role_name(bot: dc_Bot, guild_id: int, role_id: int) -> str:
     try:
-        name = (await get_guild_role(bot.adapter, bot, guild_id, role_id)).name
+        name = (await bot.get_guild_role(guild_id=guild_id, role_id=role_id)).name
     except ActionFailed:
         name = "(error:未知身份组)"
 
@@ -254,18 +251,18 @@ class MessageBuilder:
             self.handle_attachment(attachment, bot) for attachment in event.attachments
         )
 
-        if event.sticker_items:
+        if is_not_unset(event.sticker_items):
             result.extend(
                 self.handle_sticker(sticker) for sticker in event.sticker_items
             )
 
-        if referenced_message := event.referenced_message:
+        if (
+            is_not_unset(referenced_message := event.referenced_message)
+            and referenced_message is not None
+        ):
             result.append(self.handle_referenced_message(referenced_message))
 
-        if hasattr(event, "message_snapshots"):
-            event = type_validate_python(
-                GuildMessageCreateEventWithMessageSnapshots, event.model_dump()
-            )
+        if is_not_unset(event.message_snapshots) and event.message_snapshots:
             result.extend(
                 self.handle_message_snapshots(event.message_snapshots[0], bot, event)
             )
@@ -295,7 +292,7 @@ class MessageBuilder:
     async def handle_attachment(self, attachment: Attachment, bot: dc_Bot) -> qq_MS:
         filename = attachment.filename
         content_type = (
-            attachment.content_type if attachment.content_type is not UNSET else ""
+            attachment.content_type if is_not_unset(attachment.content_type) else ""
         )
         filetype = filename.split(".")[-1]
         if "image" in content_type:
@@ -333,17 +330,19 @@ class MessageBuilder:
 
     def handle_message_snapshots(
         self,
-        message_snapshots: MessageSnapshots,
+        message_snapshots: MessageSnapshot,
         bot: dc_Bot,
-        event: GuildMessageCreateEventWithMessageSnapshots,
+        event: GuildMessageCreateEvent,
     ) -> list[Coroutine[Any, Any, qq_M | qq_MS | None]]:
         result: list[Coroutine[Any, Any, qq_M | qq_MS | None]] = [
             asyncio.sleep(0, qq_MS.text("↱ 已转发：\n"))
         ]
         message = message_snapshots.message
         if (
-            message_reference := event.message_reference
-        ) and message_reference is not UNSET:
+            (message_reference := event.message_reference)
+            and is_not_unset(message_reference)
+            and is_not_unset(message_reference.guild_id)
+        ):
             event.guild_id = message_reference.guild_id
 
         i_seg = dc_M._construct(message.content)
@@ -359,29 +358,25 @@ class MessageBuilder:
             for attachment in message.attachments
         )
 
-        if message.sticker_items:
+        if is_not_unset(message.sticker_items):
             result.extend(
                 self.handle_sticker(sticker) for sticker in message.sticker_items
             )
 
-        result.append(self.build_snapshots_info(bot, event))
+        result.append(self.build_snapshots_info(bot, event.guild_id, message.timestamp))
 
         return result
 
     async def build_snapshots_info(
-        self, bot: dc_Bot, event: GuildMessageCreateEventWithMessageSnapshots
+        self, bot: dc_Bot, guild_id: int, timestamp: datetime
     ) -> qq_MS:
         try:
-            guild_name = (await get_guild_preview(bot.adapter, bot, event.guild_id))[
-                "name"
-            ] + " "
+            guild_name = (await bot.get_guild_preview(guild_id=guild_id)).name + " "
         except ActionFailed as e:
             if e.message == "Unknown Guild":
                 guild_name = ""
             else:
                 raise e
-
-        timestamp = event.message_snapshots[0].message.timestamp
 
         return qq_MS.text(
             "\n"
@@ -395,8 +390,8 @@ class MessageBuilder:
         return qq_MS.text(
             (
                 event.member.nick
-                if event.member is not UNSET
-                and event.member.nick is not UNSET
+                if is_not_unset(event.member)
+                and is_not_unset(event.member.nick)
                 and event.member.nick
                 else event.author.global_name or ""
             )
@@ -429,36 +424,36 @@ class MessageBuilder:
         embed: Embed = seg.data["embed"]
         parts: qq_M = qq_M()
 
-        if embed.author is not UNSET:
+        if is_not_unset(embed.author):
             author = embed.author.name
-            if embed.author.url is not UNSET:
+            if is_not_unset(embed.author.url):
                 author += f"({embed.author.url}\udb40\udc20)"
             parts.append(author + ":\n")
 
-        if embed.title is not UNSET:
+        if is_not_unset(embed.title):
             title = embed.title
-            if embed.url is not UNSET:
+            if is_not_unset(embed.url):
                 title += f"({embed.url}\udb40\udc20)"
             parts.append(title + "\n")
 
-        if embed.thumbnail is not UNSET:
+        if is_not_unset(embed.thumbnail):
             parts.append(embed.thumbnail.url + "\n")
 
-        if embed.description is not UNSET:
+        if is_not_unset(embed.description):
             parts.append(embed.description.replace(")", "\udb40\udc20)") + "\n")
 
-        if embed.fields is not UNSET:
+        if is_not_unset(embed.fields):
             parts.extend(
                 qq_MS.text(f"{field.name}\n{field.value}\n") for field in embed.fields
             )
 
-        if embed.image is not UNSET:
+        if is_not_unset(embed.image):
             parts.append(
                 qq_MS.image(await get_file_bytes(bot, embed.image.url, discord_proxy))
             )
             parts.append("\n")
 
-        if embed.video is not UNSET:
+        if is_not_unset(embed.video) and is_not_unset(embed.video.proxy_url):
             parts.append(
                 qq_MS.video(
                     await get_file_bytes(bot, embed.video.proxy_url, discord_proxy)

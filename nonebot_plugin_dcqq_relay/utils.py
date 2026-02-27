@@ -1,25 +1,21 @@
 from io import BytesIO
 import re
 import ssl
-from typing import Any
 
 from nonebot import logger
 from nonebot.adapters import Bot
 from nonebot.adapters.discord import (
-    Adapter as dc_Adapter,
     Bot as dc_Bot,
     GuildMessageCreateEvent,
     GuildMessageDeleteEvent,
+    is_not_unset,
 )
-from nonebot.adapters.discord.api import UNSET
-from nonebot.adapters.discord.api.model import Role, SnowflakeType
-from nonebot.adapters.discord.api.request import _request
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
     GroupMessageEvent,
     GroupRecallNoticeEvent,
 )
-from nonebot.compat import model_dump, type_validate_python
+from nonebot.compat import model_dump
 from nonebot.internal.driver import Request
 from pydub import AudioSegment
 import pysilk
@@ -79,9 +75,9 @@ async def get_dc_member_name(
 ) -> tuple[str, str]:
     try:
         member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
-        if (nick := member.nick) and nick is not UNSET:
-            return nick, member.user.username if member.user is not UNSET else ""
-        elif member.user is not UNSET and (global_name := member.user.global_name):
+        if (nick := member.nick) and is_not_unset(nick):
+            return nick, member.user.username if is_not_unset(member.user) else ""
+        elif is_not_unset(member.user) and (global_name := member.user.global_name):
             return global_name, member.user.username
         else:
             return "", str(user_id)
@@ -122,7 +118,7 @@ async def get_webhook(bot: dc_Bot, link: LinkWithoutWebhook) -> LinkWithWebhook 
             ),
             None,
         )
-        if bot_webhook and bot_webhook.token:
+        if bot_webhook and is_not_unset(bot_webhook.token):
             return build_link(link, bot_webhook.id, bot_webhook.token)
     except Exception as e:
         logger.error(
@@ -132,7 +128,7 @@ async def get_webhook(bot: dc_Bot, link: LinkWithoutWebhook) -> LinkWithWebhook 
         create_webhook = await bot.create_webhook(
             channel_id=link.dc_channel_id, name=str(link.dc_channel_id)
         )
-        if create_webhook.token:
+        if is_not_unset(create_webhook.token):
             return build_link(link, create_webhook.id, create_webhook.token)
     except Exception as e:
         logger.error(
@@ -178,40 +174,14 @@ def skil_to_ogg(skil_bytes: bytes) -> bytes:
 
 async def get_dc_member_avatar(bot: dc_Bot, guild_id: int, user_id: int) -> str:
     member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
-    if member.avatar is not UNSET and (avatar := member.avatar):
+    if (avatar := member.avatar) and is_not_unset(avatar):
         return (
             f"https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/avatars/{avatar}."
             + ("gif" if re.match(r"^a_.*", avatar) else "webp")
         )
-    elif (user := member.user) and user is not UNSET and user.avatar:
+    elif (user := member.user) and is_not_unset(user) and user.avatar is not None:
         return f"https://cdn.discordapp.com/avatars/{user_id}/{user.avatar}." + (
             "gif" if re.match(r"^a_.*", user.avatar) else "webp"
         )
     else:
         return ""
-
-
-async def get_guild_preview(
-    adapter: dc_Adapter, bot: dc_Bot, guild_id: SnowflakeType
-) -> Any:
-    """https://discord.com/developers/docs/resources/guild#get-guild-preview"""
-    headers = {"Authorization": adapter.get_authorization(bot.bot_info)}
-    request = Request(
-        headers=headers,
-        method="GET",
-        url=adapter.base_url / f"guilds/{guild_id}/preview",
-    )
-    return await _request(adapter, bot, request)
-
-
-async def get_guild_role(
-    adapter: dc_Adapter, bot: dc_Bot, guild_id: SnowflakeType, role_id: SnowflakeType
-) -> Role:
-    """https://discord.com/developers/docs/resources/guild#get-guild-roles"""
-    headers = {"Authorization": adapter.get_authorization(bot.bot_info)}
-    request = Request(
-        headers=headers,
-        method="GET",
-        url=adapter.base_url / f"guilds/{guild_id}/roles/{role_id}",
-    )
-    return type_validate_python(Role, await _request(adapter, bot, request))
