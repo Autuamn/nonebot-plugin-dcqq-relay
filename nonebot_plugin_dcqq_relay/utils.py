@@ -2,6 +2,7 @@ from io import BytesIO
 import re
 import ssl
 
+from filetype import match
 from nonebot import logger
 from nonebot.adapters import Bot
 from nonebot.adapters.discord import (
@@ -161,11 +162,15 @@ def pydub_transform(origin_bytes: bytes, input_type: str, output_type: str) -> b
     return output_buffer.read()
 
 
-def skil_to_ogg(skil_bytes: bytes) -> bytes:
+def skil_to_ogg(origi_bytes: bytes) -> bytes:
     output_buffer = BytesIO()
 
-    pcm_bytes = pysilk.decode(skil_bytes, True, sample_rate=24000)
-    audio = AudioSegment.from_file(BytesIO(pcm_bytes), format="wav")
+    ft_match = match(origi_bytes)
+    if not ft_match:
+        pcm_bytes = pysilk.decode(origi_bytes, True, sample_rate=24000)
+        audio = AudioSegment.from_file(BytesIO(pcm_bytes), format="wav")
+    else:
+        audio = AudioSegment.from_file(BytesIO(origi_bytes), format=ft_match.extension)
     audio.export(output_buffer, format="ogg")
 
     output_buffer.seek(0)
