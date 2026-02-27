@@ -1,3 +1,4 @@
+import asyncio
 from io import BytesIO
 import re
 import ssl
@@ -13,6 +14,7 @@ from nonebot.adapters.discord import (
 )
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.onebot.v11 import (
+    Bot as qq_Bot,
     GroupMessageEvent,
     GroupRecallNoticeEvent,
 )
@@ -23,8 +25,10 @@ import pysilk
 
 from .config import LinkWithoutWebhook, LinkWithWebhook, channel_links
 
+with_webhook_links: list[LinkWithWebhook] = []
 
-async def check_messages(
+
+def check_messages(
     event: (
         GroupMessageEvent
         | GuildMessageCreateEvent
@@ -58,7 +62,7 @@ async def check_messages(
         )
 
 
-async def check_to_me(
+def check_to_me(
     event: (
         GroupMessageEvent
         | GuildMessageCreateEvent
@@ -69,6 +73,34 @@ async def check_to_me(
     if isinstance(event, GroupMessageEvent | GuildMessageCreateEvent):
         return event.to_me
     return True
+
+
+def get_link(
+    bot: qq_Bot | dc_Bot,
+    event: (
+        GroupMessageEvent
+        | GuildMessageCreateEvent
+        | GroupRecallNoticeEvent
+        | GuildMessageDeleteEvent
+    ),
+) -> LinkWithWebhook | None:
+    return next(
+        (
+            link
+            for link in with_webhook_links
+            if (
+                (link.dc_channel_id == event.channel_id)
+                if isinstance(event, GuildMessageCreateEvent | GuildMessageDeleteEvent)
+                else False
+            )
+            or (
+                (link.qq_group_id == event.group_id)
+                if isinstance(event, GroupMessageEvent | GroupRecallNoticeEvent)
+                else False
+            )
+        ),
+        None,
+    )
 
 
 async def get_dc_member_name(
@@ -150,6 +182,16 @@ def build_link(
         webhook_token=webhook_token,
         **model_dump(link, exclude={"webhook_id", "webhook_token"}),
     )
+
+
+async def get_webhooks(bot: dc_Bot) -> list[int]:
+    global with_webhook_links
+    task = [get_webhook(bot, link) for link in channel_links]
+    links = await asyncio.gather(*task)
+    with_webhook_links.extend(
+        link for link in links if isinstance(link, LinkWithWebhook)
+    )
+    return [link for link in links if isinstance(link, int)]
 
 
 def pydub_transform(origin_bytes: bytes, input_type: str, output_type: str) -> bytes:

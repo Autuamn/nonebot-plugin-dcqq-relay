@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from nonebot import logger
+from nonebot import get_bots, logger
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     GuildMessageCreateEvent,
@@ -33,7 +33,7 @@ from nonebot_plugin_localstore import get_plugin_cache_dir
 from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
-from .config import LinkWithWebhook, discord_proxy
+from .config import Link, discord_proxy
 from .model import MsgID
 from .utils import (
     get_dc_member_name,
@@ -144,13 +144,15 @@ async def gather_send(
 async def create_dc_to_qq(
     bot: dc_Bot,
     event: GuildMessageCreateEvent,
-    qq_bot: qq_Bot,
-    channel_links: list[LinkWithWebhook],
+    link: Link,
 ):
     """discord 消息转发到 QQ"""
     logger.debug("create dc to qq: start")
-    link = next(
-        link for link in channel_links if link.dc_channel_id == event.channel_id
+    qq_bot: qq_Bot = next(
+        bot
+        for self_id, bot in get_bots().items()
+        if isinstance(bot, qq_Bot)
+        and ((self_id == link.qq_bot_id) if link.qq_bot_id else True)
     )
     seg_msg = await ensure_message(bot, event)
 
@@ -184,13 +186,19 @@ async def create_dc_to_qq(
 
 async def delete_dc_to_qq(
     event: GuildMessageDeleteEvent,
-    qq_bot: qq_Bot,
+    link: Link,
     just_delete: list,
 ):
     logger.debug("delete dc to qq: start")
     if (id := event.id) in just_delete:
         just_delete.remove(id)
         return
+    qq_bot: qq_Bot = next(
+        bot
+        for self_id, bot in get_bots().items()
+        if isinstance(bot, qq_Bot)
+        and ((self_id == link.qq_bot_id) if link.qq_bot_id else True)
+    )
     for try_times in range(3):
         try:
             async with get_session() as session:

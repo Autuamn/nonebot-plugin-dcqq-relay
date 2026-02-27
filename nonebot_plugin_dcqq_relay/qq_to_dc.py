@@ -6,7 +6,7 @@ from urllib.request import url2pathname
 
 from anyio import Path
 import filetype
-from nonebot import logger
+from nonebot import get_bots, logger
 from nonebot.adapters.discord import Bot as dc_Bot
 from nonebot.adapters.discord.api import Embed, EmbedAuthor, File
 from nonebot.adapters.discord.exception import NetworkError
@@ -21,7 +21,7 @@ from nonebot.adapters.onebot.v11.event import Reply
 from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
-from .config import LinkWithWebhook, discord_proxy
+from .config import Link, LinkWithWebhook, discord_proxy
 from .model import MsgID
 from .qq_emoji_dict import qq_emoji_dict
 from .utils import get_file_bytes, skil_to_ogg
@@ -57,12 +57,16 @@ def get_file_name(seg: str | MessageSegment, content: bytes | None = None) -> st
 async def create_qq_to_dc(
     bot: qq_Bot,
     event: GroupMessageEvent,
-    dc_bot: dc_Bot,
-    channel_links: list[LinkWithWebhook],
+    link: LinkWithWebhook,
 ):
     """QQ 消息转发到 discord"""
     logger.debug("create qq to dc: start")
-    link = next(link for link in channel_links if link.qq_group_id == event.group_id)
+    dc_bot: dc_Bot = next(
+        bot
+        for self_id, bot in get_bots().items()
+        if isinstance(bot, dc_Bot)
+        and ((self_id == link.dc_bot_id) if link.dc_bot_id else True)
+    )
     builder = MessageBuilder()
 
     seg_msg = event.get_message()
@@ -107,18 +111,18 @@ async def create_qq_to_dc(
 
 async def delete_qq_to_dc(
     event: GroupRecallNoticeEvent,
-    dc_bot: dc_Bot,
-    channel_links: list[LinkWithWebhook],
+    link: Link,
     just_delete: list,
 ):
     logger.debug("delete qq to dc: start")
     if (id := event.message_id) in just_delete:
         just_delete.remove(id)
         return
-    channel_id = next(
-        link.dc_channel_id
-        for link in channel_links
-        if link.qq_group_id == event.group_id
+    dc_bot: dc_Bot = next(
+        bot
+        for self_id, bot in get_bots().items()
+        if isinstance(bot, dc_Bot)
+        and ((self_id == link.dc_bot_id) if link.dc_bot_id else True)
     )
     for try_times in range(3):
         try:
@@ -128,7 +132,7 @@ async def delete_qq_to_dc(
                 ):
                     for msgid in msgids:
                         await dc_bot.delete_message(
-                            message_id=msgid.dcid, channel_id=channel_id
+                            message_id=msgid.dcid, channel_id=link.dc_channel_id
                         )
                         just_delete.append(msgid.dcid)
                         await session.delete(msgid)

@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 
 class Link(BaseModel):
+    qq_bot_id: str | None = None
+    dc_bot_id: str | None = None
     dc_guild_id: int
     dc_channel_id: int
     qq_group_id: int
