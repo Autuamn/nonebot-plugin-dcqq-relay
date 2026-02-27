@@ -1,10 +1,10 @@
 import asyncio
 import re
 from urllib.request import url2pathname
-from pathlib import Path
 from typing import Any
 from collections.abc import Callable
 from collections.abc import Coroutine
+from anyio import Path
 
 import filetype
 from nonebot import logger
@@ -361,40 +361,51 @@ class MessageBuilder:
     async def record(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
     ) -> MsgResult:
+        record_bytes: bytes | None = None
+
         if path := seg.data.get("path", ""):
-            while True:
-                if not Path(path).exists():
-                    await asyncio.sleep(0.1)
-                    continue
-                record_bytes = Path(path).read_bytes()
-                break
-        elif url := seg.data.get("url", ""):
+            for _ in range(3):
+                if await Path(path).exists():
+                    record_bytes = await Path(path).read_bytes()
+                    break
+                await asyncio.sleep(0.1)
+        if not record_bytes and (url := seg.data.get("url", "")):
             record_bytes = await get_file_bytes(bot, url)
-        else:
-            path = url2pathname(seg.data["file"].removeprefix("file:"))
-            record_bytes = Path(path).read_bytes()
+        if not record_bytes and (file_val := seg.data.get("file", "")):
+            path = url2pathname(file_val.removeprefix("file:"))
+            if await Path(path).exists():
+                record_bytes = await Path(path).read_bytes()
 
         return MsgResult(
             text="[语音]",
-            file=File(
-                content=skil_to_ogg(record_bytes),
-                filename="voice-message.ogg",
+            file=(
+                File(
+                    content=skil_to_ogg(record_bytes),
+                    filename="voice-message.ogg",
+                )
+                if record_bytes
+                else None
             ),
         )
 
     async def video(
         self, seg: MessageSegment, bot: qq_Bot, event: GroupMessageEvent
     ) -> MsgResult:
-        filename = get_file_name(seg)
-        url = seg.data["url"]
+        filename: str = get_file_name(seg)
+        url: str = seg.data["url"]
+        content: bytes | None = None
 
-        if path := seg.data.get("path", ""):
-            content = Path(path).read_bytes()
-        elif re.search(r"^https?:\/\/", url):
+        if s_path := seg.data.get("path", ""):
+            for _ in range(10):
+                if await Path(s_path).exists():
+                    content = await Path(s_path).read_bytes()
+                    break
+                await asyncio.sleep(1)
+        if not content and re.search(r"^https?:\/\/", url):
             content = await get_file_bytes(bot, url)
-        elif (path := Path(url)) and path.is_file():
-            content = path.read_bytes()
-        else:
+        if not content and (path := Path(url)) and await path.is_file():
+            content = await path.read_bytes()
+        if not content:
             return MsgResult(text="[视频]")
 
         filename = get_file_name(filename, content)
@@ -413,7 +424,7 @@ class MessageBuilder:
             content = await get_file_bytes(bot, seg.data["url"])
         elif file_id := seg.data.get("file_id", ""):
             file_info = await bot.call_api("get_file", file_id=file_id)
-            content = Path(file_info["file"]).read_bytes()
+            content = await Path(file_info["file"]).read_bytes()
         else:
             return MsgResult(text=f"[{filename}]")
 
