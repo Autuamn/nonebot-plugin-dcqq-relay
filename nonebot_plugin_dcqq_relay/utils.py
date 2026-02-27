@@ -5,7 +5,6 @@ import ssl
 from nonebot import logger
 from nonebot.adapters import Bot
 from nonebot.adapters.discord import (
-    UNSET,
     Bot as dc_Bot,
     GuildMessageCreateEvent,
     GuildMessageDeleteEvent,
@@ -76,9 +75,9 @@ async def get_dc_member_name(
 ) -> tuple[str, str]:
     try:
         member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
-        if (nick := member.nick) and nick is not UNSET:
-            return nick, member.user.username if member.user is not UNSET else ""
-        elif member.user is not UNSET and (global_name := member.user.global_name):
+        if (nick := member.nick) and is_not_unset(nick):
+            return nick, member.user.username if is_not_unset(member.user) else ""
+        elif is_not_unset(member.user) and (global_name := member.user.global_name):
             return global_name, member.user.username
         else:
             return "", str(user_id)
@@ -175,12 +174,12 @@ def skil_to_ogg(skil_bytes: bytes) -> bytes:
 
 async def get_dc_member_avatar(bot: dc_Bot, guild_id: int, user_id: int) -> str:
     member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
-    if member.avatar is not UNSET and (avatar := member.avatar):
+    if (avatar := member.avatar) and is_not_unset(avatar):
         return (
             f"https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/avatars/{avatar}."
             + ("gif" if re.match(r"^a_.*", avatar) else "webp")
         )
-    elif (user := member.user) and user is not UNSET and user.avatar:
+    elif (user := member.user) and is_not_unset(user) and user.avatar is not None:
         return f"https://cdn.discordapp.com/avatars/{user_id}/{user.avatar}." + (
             "gif" if re.match(r"^a_.*", user.avatar) else "webp"
         )

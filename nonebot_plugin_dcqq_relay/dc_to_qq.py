@@ -11,7 +11,6 @@ from nonebot.adapters.discord import (
     GuildMessageDeleteEvent,
 )
 from nonebot.adapters.discord.api import (
-    UNSET,
     Attachment,
     Embed,
     MessageGet,
@@ -293,7 +292,7 @@ class MessageBuilder:
     async def handle_attachment(self, attachment: Attachment, bot: dc_Bot) -> qq_MS:
         filename = attachment.filename
         content_type = (
-            attachment.content_type if attachment.content_type is not UNSET else ""
+            attachment.content_type if is_not_unset(attachment.content_type) else ""
         )
         filetype = filename.split(".")[-1]
         if "image" in content_type:
@@ -391,8 +390,8 @@ class MessageBuilder:
         return qq_MS.text(
             (
                 event.member.nick
-                if event.member is not UNSET
-                and event.member.nick is not UNSET
+                if is_not_unset(event.member)
+                and is_not_unset(event.member.nick)
                 and event.member.nick
                 else event.author.global_name or ""
             )
@@ -425,30 +424,30 @@ class MessageBuilder:
         embed: Embed = seg.data["embed"]
         parts: qq_M = qq_M()
 
-        if embed.author is not UNSET:
+        if is_not_unset(embed.author):
             author = embed.author.name
-            if embed.author.url is not UNSET:
+            if is_not_unset(embed.author.url):
                 author += f"({embed.author.url}\udb40\udc20)"
             parts.append(author + ":\n")
 
-        if embed.title is not UNSET:
+        if is_not_unset(embed.title):
             title = embed.title
-            if embed.url is not UNSET:
+            if is_not_unset(embed.url):
                 title += f"({embed.url}\udb40\udc20)"
             parts.append(title + "\n")
 
-        if embed.thumbnail is not UNSET:
+        if is_not_unset(embed.thumbnail):
             parts.append(embed.thumbnail.url + "\n")
 
-        if embed.description is not UNSET:
+        if is_not_unset(embed.description):
             parts.append(embed.description.replace(")", "\udb40\udc20)") + "\n")
 
-        if embed.fields is not UNSET:
+        if is_not_unset(embed.fields):
             parts.extend(
                 qq_MS.text(f"{field.name}\n{field.value}\n") for field in embed.fields
             )
 
-        if embed.image is not UNSET:
+        if is_not_unset(embed.image):
             parts.append(
                 qq_MS.image(await get_file_bytes(bot, embed.image.url, discord_proxy))
             )
