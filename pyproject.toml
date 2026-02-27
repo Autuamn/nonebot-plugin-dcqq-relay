@@ -1,28 +1,36 @@
-[tool.poetry]
+[project]
 name = "nonebot-plugin-dcqq-relay"
 version = "1.3.0"
 description = "在QQ群与 Discord 之间同步消息的 nonebot2 插件"
-authors = ["Autuamn_End <autuamn@qq.com>"]
+authors = [{ name = "Autuamn_End", email = "autuamn@qq.com" }]
 license = "MIT"
 readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "nonebot2[aiohttp,fastapi]>=2.2.1,<3.0.0",
+    "nonebot-adapter-onebot>=2.4.3,<3.0.0",
+    "nonebot-adapter-discord>=1.1.3,<2.0.0",
+    "nonebot-plugin-orm[default]>=0.8.1,<0.9.0",
+    "filetype>=1.2.0,<2.0.0",
+    "pydub>=0.25.1,<0.26.0",
+    "pysilk-mod>=1.6.4,<2.0.0",
+    "nonebot-plugin-localstore>=0.7.4,<0.8.0",
+    "audioop-lts; python_version >= '3.13' and python_version < '4.0'",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-nonebot2 = { extras = ["aiohttp", "fastapi"], version = "^2.2.1" }
-nonebot-adapter-onebot = "^2.4.3"
-nonebot-adapter-discord = "^1.1.3"
-nonebot-plugin-orm = { extras = ["default"], version = "^0.8.1" }
-filetype = "^1.2.0"
-pydub = "^0.25.1"
-pysilk-mod = "^1.6.4"
-nonebot-plugin-localstore = "^0.7.4"
-audioop-lts = { python = "^3.13", version = "*" }
+[dependency-groups]
+dev = [
+    "ruff>=0.15.2,<1.0.0",
+    "black>=26.1.0,<27.0.0",
+    "nonemoji>=0.1.4,<0.2.0",
+    "pre-commit>=4.5.1,<5.0.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.15.2"
-black = "^26.1.0"
-nonemoji = "^0.1.4"
-pre-commit = "^4.5.1"
+[project.urls]
+github = "https://github.com/Autuamn/nonebot-plugin-dcqq-relay"
+
+[tool.uv.build-backend]
+module-root = ""
 
 [tool.ruff]
 line-length = 88
@@ -81,5 +89,5 @@ pythonPlatform = "All"
 pythonVersion = "3.10"
 
 [build-system]
-requires = ["poetry_core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"
