@@ -2,35 +2,19 @@
   "name": "Default Linux Universal",
   "image": "mcr.microsoft.com/devcontainers/universal:2-linux",
   "features": {
-    "ghcr.io/devcontainers-contrib/features/poetry:2": {}
+    "ghcr.io/devcontainer-community/devcontainer-features/astral.sh-uv:1": {}
   },
-  "postCreateCommand": "poetry config virtualenvs.in-project true && poetry install && poetry run pre-commit install",
+  "postCreateCommand": "uv sync && uv run pre-commit install",
   "customizations": {
     "vscode": {
       "settings": {
         "python.analysis.diagnosticMode": "workspace",
-        "ruff.organizeImports": false,
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff",
           "editor.codeActionsOnSave": {
             "source.fixAll": "explicit",
             "source.organizeImports": "explicit"
           }
-        },
-        "[javascript]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[html]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[typescript]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[javascriptreact]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
-        },
-        "[typescriptreact]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
         },
         "files.exclude": {
           "**/__pycache__": true
@@ -43,10 +27,10 @@
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-python.isort",
         "charliermarsh.ruff",
         "EditorConfig.EditorConfig",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "the0807.uv-toolkit"
       ]
     }
   }
