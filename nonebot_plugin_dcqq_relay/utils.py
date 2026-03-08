@@ -38,22 +38,15 @@ def check_messages(
 ) -> bool:
     """检查消息"""
     logger.debug("into check_messages()")
-    if isinstance(event, GroupMessageEvent):
+    if isinstance(event, GroupMessageEvent | GroupRecallNoticeEvent):
         return any(event.group_id == link.qq_group_id for link in channel_links)
     elif isinstance(event, GuildMessageCreateEvent):
-        if not (
-            re.match(r".*?\[QQ:\d*?\]$", event.author.username)
-            and event.author.bot is True
-        ):
-            return any(
-                event.guild_id == link.dc_guild_id
-                and event.channel_id == link.dc_channel_id
-                for link in channel_links
-            )
-        else:
-            return False
-    elif isinstance(event, GroupRecallNoticeEvent):
-        return any(event.group_id == link.qq_group_id for link in channel_links)
+        return any(
+            event.guild_id == link.dc_guild_id
+            and event.channel_id == link.dc_channel_id
+            and event.webhook_id != link.webhook_id
+            for link in with_webhook_links
+        )
     elif isinstance(event, GuildMessageDeleteEvent):
         return any(
             event.guild_id == link.dc_guild_id
