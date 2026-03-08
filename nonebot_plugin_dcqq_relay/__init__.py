@@ -42,7 +42,6 @@ __plugin_meta__ = PluginMetadata(
 
 
 driver = get_driver()
-with_webhook_links: list[LinkWithWebhook] = []
 just_delete = []
 
 
@@ -85,7 +84,7 @@ async def message_relay(
 ):
     if link is None:
         logger.warning("fail to get channel link")
-        matcher.finish()
+        await matcher.finish()
         return
     logger.debug("message relay: start")
     for try_times in range(3):
