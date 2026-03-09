@@ -1,5 +1,5 @@
-from tests.data import get_guild_member_result
-from tests.utils import create_bot
+from tests.conftest import create_bot
+from tests.data import guild_member
 
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.drivers import Response
@@ -20,9 +20,9 @@ async def test_nick_and_user_exist(app: App) -> None:
         username = "test"
 
         ctx.should_call_api(
-            "get_guild_member",
-            call_data,
-            get_guild_member_result(nick=name, username=username),
+            api="get_guild_member",
+            data=call_data,
+            result=guild_member(nick=name, username=username),
         )
         assert await get_dc_member_name(dc_bot, **call_data) == (name, username)
 
@@ -40,9 +40,9 @@ async def test_only_nick_exist(app: App) -> None:
         username = "test"
 
         ctx.should_call_api(
-            "get_guild_member",
-            call_data,
-            get_guild_member_result(nick=name, username=username, unset_user=True),
+            api="get_guild_member",
+            data=call_data,
+            result=guild_member(nick=name, username=username, unset_user=True),
         )
         assert await get_dc_member_name(dc_bot, **call_data) == (name, "")
 
@@ -60,9 +60,9 @@ async def test_only_user_exist(app: App) -> None:
         username = "test"
 
         ctx.should_call_api(
-            "get_guild_member",
-            call_data,
-            get_guild_member_result(username=username, global_name=name),
+            api="get_guild_member",
+            data=call_data,
+            result=guild_member(username=username, global_name=name),
         )
         assert await get_dc_member_name(dc_bot, **call_data) == (name, username)
 
@@ -77,9 +77,9 @@ async def test_nick_and_user_not_exist(app: App) -> None:
         call_data: dict[str, int] = {"guild_id": 1, "user_id": 2}
 
         ctx.should_call_api(
-            "get_guild_member",
-            call_data,
-            get_guild_member_result(unset_user=True),
+            api="get_guild_member",
+            data=call_data,
+            result=guild_member(unset_user=True),
         )
         assert await get_dc_member_name(dc_bot, **call_data) == (
             "",
@@ -97,8 +97,8 @@ async def test_unknown_user_error(app: App) -> None:
         call_data: dict[str, int] = {"guild_id": 1, "user_id": 2}
 
         ctx.should_call_api(
-            "get_guild_member",
-            call_data,
+            api="get_guild_member",
+            data=call_data,
             exception=ActionFailed(
                 Response(
                     status_code=404,
@@ -125,8 +125,8 @@ async def test_unknown_guild_error(app: App) -> None:
         username = "test"
 
         ctx.should_call_api(
-            "get_guild_member",
-            call_data,
+            api="get_guild_member",
+            data=call_data,
             exception=ActionFailed(
                 Response(
                     status_code=404,
@@ -135,9 +135,9 @@ async def test_unknown_guild_error(app: App) -> None:
             ),
         )
         ctx.should_call_api(
-            "get_user",
-            {"user_id": call_data["user_id"]},
-            get_guild_member_result(global_name=name, username=username).user,
+            api="get_user",
+            data={"user_id": call_data["user_id"]},
+            result=guild_member(global_name=name, username=username).user,
         )
         assert await get_dc_member_name(dc_bot, **call_data) == (name, username)
 
@@ -152,8 +152,8 @@ async def test_other_error(app: App) -> None:
         call_data: dict[str, int] = {"guild_id": 1, "user_id": 2}
 
         ctx.should_call_api(
-            "get_guild_member",
-            call_data,
+            api="get_guild_member",
+            data=call_data,
             exception=ActionFailed(Response(status_code=404)),
         )
         with pytest.RaisesExc(ActionFailed):

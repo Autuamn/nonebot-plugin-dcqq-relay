@@ -15,6 +15,7 @@ from nonebot.adapters.discord.api import (
     MessageGet,
     Role,
     Snowflake,
+    User,
     Webhook,
 )
 from nonebot.adapters.discord.utils import model_dump
@@ -30,33 +31,63 @@ from nonebot.adapters.onebot.v11.message import (
 from nonebot.compat import type_validate_python
 
 
-def create_webhook_result(application_id: int) -> Webhook:
-    return type_validate_python(
+def webhook(
+    id: str = "1", token: str | None = "xx", application_id: str | None = "12345"
+) -> Webhook:
+    wh = type_validate_python(
         Webhook,
         {
-            "id": "1",
+            "id": id,
             "type": 1,
             "application_id": application_id,
-            "token": "x",
             "channel_id": None,
             "name": None,
             "avatar": None,
         },
     )
+    if token is not None:
+        wh.token = token
+    return wh
 
 
-def get_channel_webhooks_result(application_id: int) -> list[Webhook]:
-    return [create_webhook_result(application_id)]
+def webhooks_list(
+    ids: list[str] | None = None,
+    tokens: list[str | None] | None = None,
+    application_ids: list[str | None] | None = None,
+) -> list[Webhook]:
+    if ids is None:
+        ids = ["1"]
+    if tokens is None:
+        tokens = ["xx"]
+    if application_ids is None:
+        application_ids = ["12345"]
+    return [
+        webhook(id, token, application_id)
+        for id, token, application_id in zip(ids, tokens, application_ids, strict=False)
+    ]
 
 
-def get_channel_message_result(
-    url: str = "x", channel_id: str = "2" * 18
-) -> MessageGet:
+def user(
+    id: str = "3" * 18,
+    username: str = "autuamn_end",
+    global_name: str | None = "Autuamn End",
+    avatar: str | None = None,
+) -> User:
+    return User(
+        id=Snowflake(id),
+        username=username,
+        discriminator="",
+        global_name=global_name,
+        avatar=avatar,
+    )
+
+
+def message_get(channel_id: str = "2" * 18, content: str = "test") -> MessageGet:
     return type_validate_python(
         MessageGet,
         {
             "type": 0,
-            "content": "",
+            "content": content,
             "mentions": [],
             "mention_roles": [],
             "attachments": [],
@@ -65,102 +96,56 @@ def get_channel_message_result(
             "edited_timestamp": None,
             "id": "1" * 18,
             "channel_id": channel_id,
-            "author": {
-                "id": "3" * 18,
-                "username": "autuamn_end",
-                "avatar": "a" * 32,
-                "discriminator": "0",
-                "global_name": "Autuamn End",
-            },
+            "author": user().model_dump(),
             "pinned": False,
             "mention_everyone": False,
             "tts": False,
-            "message_snapshots": [
-                {
-                    "message": {
-                        "type": 0,
-                        "content": (
-                            f"0 <#{'4' * 18}> "
-                            + f" 1 <@{'3' * 18}>"
-                            + f" 2 <@&{'5' * 18}>"
-                        ),
-                        "mentions": [
-                            {
-                                "id": "3" * 18,
-                                "username": "autuamn_end",
-                                "avatar": "a" * 32,
-                                "discriminator": "0",
-                                "global_name": "Autuamn End",
-                            }
-                        ],
-                        "mention_roles": ["5" * 18],
-                        "attachments": [
-                            {
-                                "id": "0" * 18,
-                                "filename": "test.png",
-                                "size": 391,
-                                "url": url,
-                                "proxy_url": url,
-                                "content_type": "image/png",
-                            }
-                        ],
-                        "embeds": [],
-                        "timestamp": "2026-02-28T01:42:01.496000+00:00",
-                        "edited_timestamp": None,
-                        "sticker_items": [
-                            {
-                                "id": "0" * 18,
-                                "name": "ek244",
-                                "format_type": 4,
-                            }
-                        ],
-                    }
-                }
-            ],
         },
     )
 
 
-def dc_complex_forward_event(
-    url: str = "x",
+def guild_message_create_event(
     guild_id: str = "6" * 18,
     channel_id: str = "2" * 18,
     webhook_id: str | None = None,
     to_me: bool = False,
+    content: str = "test",
 ) -> GuildMessageCreateEvent:
     ev = type_validate_python(
         GuildMessageCreateEvent,
         {
             "to_me": to_me,
             "guild_id": guild_id,
-            **model_dump(get_channel_message_result(url, channel_id)),
+            **model_dump(message_get(channel_id, content)),
         },
     )
-
     if webhook_id is not None:
         ev.webhook_id = Snowflake(webhook_id)
-
     return ev
 
 
-def get_channel_result() -> Channel:
+def channel(
+    id: str = "4" * 18, guild_id: str = "6" * 18, name: str = "test"
+) -> Channel:
     return type_validate_python(
         Channel,
         {
-            "id": "4" * 18,
+            "id": id,
             "type": 0,
-            "guild_id": "6" * 18,
-            "name": "test",
+            "guild_id": guild_id,
+            "name": name,
         },
     )
 
 
-def get_guild_member_result(
+def guild_member(
     id: str = "3" * 18,
     username: str = "autuamn_end",
     global_name: str = "Autuamn End",
     nick: str | None = None,
     unset_user: bool = False,
+    member_avatar: str | None = None,
+    user_avatar: str | None = None,
 ) -> GuildMember:
     ev = type_validate_python(
         GuildMember,
@@ -168,32 +153,28 @@ def get_guild_member_result(
             "flags": 2,
             "joined_at": "2023-11-07T03:44:23.842000+00:00",
             "roles": [],
-            "user": {
-                "id": id,
-                "username": username,
-                "avatar": "a" * 32,
-                "discriminator": "0",
-                "global_name": global_name,
-            },
+            "user": user(id, username, global_name, user_avatar).model_dump(),
         },
     )
     if nick is not None:
         ev.nick = nick
+    if member_avatar is not None:
+        ev.avatar = member_avatar
     if unset_user:
         ev.user = UNSET
     return ev
 
 
-def get_guild_role_result() -> Role:
+def role(id: str = "5" * 18, name: str = "test") -> Role:
     return type_validate_python(
         Role,
         {
-            "id": "5" * 18,
-            "name": "test",
+            "id": id,
+            "name": name,
             "description": None,
             "permissions": "0",
             "position": 11,
-            "color": 15105570,
+            "color": 0,
             "hoist": False,
             "managed": False,
             "mentionable": False,
@@ -201,12 +182,12 @@ def get_guild_role_result() -> Role:
     )
 
 
-def get_guild_preview_result() -> GuildPreview:
+def guild_preview(id: str = "6" * 18, name: str = "name") -> GuildPreview:
     return type_validate_python(
         GuildPreview,
         {
-            "id": "6" * 18,
-            "name": "test",
+            "id": id,
+            "name": name,
             "features": [],
             "approximate_member_count": 0,
             "approximate_presence_count": 0,
@@ -216,48 +197,39 @@ def get_guild_preview_result() -> GuildPreview:
     )
 
 
-def send_group_msg_result():
+def send_group_msg_data(
+    group_id: int = 10001,
+    message: QQMessage | list[QQMessageSegment] | str = "test",
+    id: str = "3" * 18,
+    username: str = "autuamn_end",
+    global_name: str | None = "Autuamn End",
+):
+    if isinstance(message, str):
+        message = [QQMessageSegment.text(message)]
+    elif isinstance(message, QQMessage):
+        message = list(message)
+
+    message = [QQMessageSegment.text(f"{global_name}(@{username}):\n\n"), *message]
+
     return {
-        "group_id": 10001,
-        "message": [
-            QQMessageSegment(
-                type="text", data={"text": "Autuamn End(@autuamn_end):\n\n"}
-            ),
-            QQMessageSegment(type="text", data={"text": "↱ 已转发：\n"}),
-            QQMessageSegment(type="text", data={"text": "0 "}),
-            QQMessageSegment(type="text", data={"text": "#test"}),
-            QQMessageSegment(type="text", data={"text": "  1 "}),
-            QQMessageSegment(type="text", data={"text": "@Autuamn End(autuamn_end)"}),
-            QQMessageSegment(type="text", data={"text": " 2 "}),
-            QQMessageSegment(type="text", data={"text": "@test"}),
-            QQMessageSegment(
-                type="image",
-                data={
-                    "file": "base64://iVBORw0KGgoAAAANSUhEUgAAAEYAAAAaCAYAAAAKYioIAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAFiUAABYlAUlSJPAAAAEcSURBVFhH7ZABCsMwDAP7/093eMxgTBxJSbtuTQ9MSSPLjrb9oQkdzLatlSH1WgvlCabBaqEYTzAFSwbDvOetMCFbd4B5B1TkQPyc659g9qWCOZorA2XnfjUYX8o983mE6MF4oXsHqlijHmjp3l0F8qyI+l4/dFUHZ3rDI8oc1tNwbVUV0L3XjEDDHVZnKNoW9JzPt2R2CdTPaCIz+xhsP1TNLOKPRqUw0hNhe08P5gxmwrl1MMZoOLcPxhgJ52eCmelnUGf0tPEOOqqDM94/44FQvCtt3pFyzE0ZdG+4hikVpafS5v+0oy/tBvHs/65AnV9p83/5Rb6IsszRxB3UPVo9LD/rXdeBGkbGw4mV+ctgjqIKxVg6mJp9fwGt8jszqRET6QAAAABJRU5ErkJggg==",
-                    "type": "png",
-                    "cache": "true",
-                    "proxy": "true",
-                    "timeout": None,
-                },
-            ),
-            QQMessageSegment(type="text", data={"text": "[ek244]"}),
-            QQMessageSegment(type="text", data={"text": "\ntest 2026/02/28 09:42"}),
-        ],
+        "group_id": group_id,
+        "message": message,
     }
 
 
-def qq_complex_event(
+def group_message_event(
     message: QQMessage | str = "test",
     group_id: int = 10001,
     to_me: bool = False,
     username: str = "sb",
     user_id: int = 10003,
 ) -> GroupMessageEvent:
-    message = (
-        QQMessage([QQMessageSegment(type="text", data={"text": message})])
-        if isinstance(message, str)
-        else message
-    )
+    if isinstance(message, str):
+        raw_message = message
+        message = QQMessage([QQMessageSegment(type="text", data={"text": message})])
+    else:
+        raw_message = message.extract_plain_text()
+
     return GroupMessageEvent(
         time=1772777414,
         self_id=12345,
@@ -268,7 +240,7 @@ def qq_complex_event(
         message_id=2,
         message=message,
         original_message=message,
-        raw_message="1",
+        raw_message=raw_message,
         font=14,
         sender=Sender(
             user_id=user_id,
@@ -282,11 +254,15 @@ def qq_complex_event(
 
 def execute_webhook_data(
     content: str = "test",
-    files: list[File] = [],  # noqa: B006
-    embeds: list[Embed] = [],  # noqa: B006
+    files: list[File] | None = None,
+    embeds: list[Embed] | None = None,
     username: str = "sb",
     user_id: int = 10003,
 ) -> dict[str, Any]:
+    if files is None:
+        files = []
+    if embeds is None:
+        embeds = []
     avatar_url = f"https://q.qlogo.cn/g?b=qq&nk={user_id}&s=100"
     return {
         "webhook_id": 1,
@@ -302,10 +278,15 @@ def execute_webhook_data(
 
 def execute_webhook_result(
     content: str = "test",
-    files: list[File] = [],  # noqa: B006
-    embeds: list[Embed] = [],  # noqa: B006
+    files: list[File] | None = None,
+    embeds: list[Embed] | None = None,
     username: str = "sb [QQ:10003]",
+    global_name: str | None = None,
 ) -> MessageGet:
+    if files is None:
+        files = []
+    if embeds is None:
+        embeds = []
     attachments: list[Attachment] = [
         Attachment(
             id=Snowflake("0"), filename=file.filename, size=1, url="1", proxy_url="1"
@@ -325,12 +306,7 @@ def execute_webhook_result(
             "edited_timestamp": None,
             "id": "0",
             "channel_id": "0",
-            "author": {
-                "id": "0",
-                "username": username,
-                "avatar": "x",
-                "discriminator": "0",
-            },
+            "author": user(username=username, global_name=global_name).model_dump(),
             "pinned": False,
             "mention_everyone": False,
             "tts": False,
@@ -374,3 +350,52 @@ def guild_message_delete_event(
         GuildMessageDeleteEvent,
         {"id": message_id, "channel_id": channel_id, "guild_id": guild_id},
     )
+
+
+skil_b64 = (
+    "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"
+)
+amr_b64 = (
+    "IyFBTVIKDB9Ub+B3bZWcmm4KKGAMzMeY+uqCzqCG3Snh8gx4iC8AavmYL7vgdgW8DPFNhsNk5F2W68uxP7"
+    + "oMrdlKx2SiW7OLVR3D2gznOTt5mz2zuBNa5IxqDHiQsONtl4f9ZttpfwgM+kLOc2plXDzCeKBcWgwfiF"
+    + "T7a8L2uGrChquGDDzM+M9PDwRQgxkC0I4MaULN++Z4CSHeZ7K2SgxpzmvfarmkPaYLK+BeDGmQCN/rhF"
+    + "7InV1jESwMa1TOzm1PZB6GUuAKJgyFzM3t73mXIAPxv0tkDJjo6f/jWGWVkrjgwRYMLELLz8wwfsSWqg"
+    + "7gsAwsiMv6a3IXnE3lfsucDGnWzPt/oG8MhOXFPn4MAOzNe35Fbm2vc8cNiAxrzBDzY7mRm5pHzE5qDG"
+    + "nM859n+RUfiyOcOFYMB86N+9uiJxlVKOVCLAxpZ/17bx09fCha0J9sDA5CRXtnVbZ/WUWVPE4MBTl823"
+    + "tTL4ilLAtwpgyFZxTb7lukfJHZjWV6DGJU5c/8pA4KubKkCNYMLMyFzutWih1i7/g11AwA7IPzf6MWHk"
+    + "ZFayFeDGlCqd/qEA6otnonSjAMYuz7muVwqBalRg8kcAzMlM3bzHCuYoIL7w0ADCzOi9Pr0Jy48h+TV9"
+    + "AMLOwiXm4Wj6S0mxiFxgwOZyfby4wVuLopMCaqDABUHtNjJU8JiObLi0IMAEZM709C2vx6h2mv9gxpzh"
+    + "N9/33FUbHTOMuEDA7kiE9/RW6gtoePgEIMaVSFznlUb2d+cN4pZAwO7O7XfaEIW1sCSH98DAB50tvvrt"
+    + "S2i7YyXBQMa8xsb29F7qymM8UeFAzEO23ffcE22nklkaSoDA5nTvtnyMVVj2M2lewMxMyH+u6q1qPIYJ"
+    + "g/qAws7JP95xnoHzr8RrwGDGKIhZt/nyePOgye41gMaewl3/j4VL+yhqkWJAwOiIR37sDqeE1X1084DM"
+    + "SShq/vsmbXVFHyHNYMaWrLdLvs7W0svAJHJg=="
+)
