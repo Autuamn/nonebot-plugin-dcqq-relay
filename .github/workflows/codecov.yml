@@ -10,7 +10,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup FFmpeg
+        uses: federicocarboni/setup-ffmpeg@v3.1
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
