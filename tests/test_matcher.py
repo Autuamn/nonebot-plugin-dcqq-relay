@@ -1,14 +1,132 @@
+from unittest.mock import patch
+
+from tests.conftest import create_bot
 from tests.data import (
-    dc_complex_forward_event,
+    execute_webhook_data,
+    execute_webhook_result,
+    get_test_links,
+    group_message_event,
     group_recall_event,
+    guild_message_create_event,
     guild_message_delete_event,
-    qq_complex_event,
+    send_group_msg_data,
 )
-from tests.utils import create_bot
 
 from nonebot.exception import FinishedException
 from nonebug import App
 import pytest
+from sqlalchemy.exc import InvalidRequestError
+
+
+@pytest.mark.asyncio
+async def test_create_dc_to_qq(app: App) -> None:
+    with patch(
+        target="nonebot_plugin_dcqq_relay.utils.with_webhook_links",
+        new_callable=get_test_links,
+    ):
+        from nonebot_plugin_dcqq_relay import matcher
+
+        async with app.test_matcher(matcher) as ctx:
+            _, dc_bot = create_bot(ctx)
+
+            ctx.receive_event(dc_bot, guild_message_create_event())
+            ctx.should_pass_rule()
+            ctx.should_call_api(
+                api="get_version_info",
+                data={},
+                result={"app_name": "other"},
+            )
+            ctx.should_call_api(
+                api="send_group_msg",
+                data=send_group_msg_data(),
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_qq_to_dc(
+    app: App,
+) -> None:
+    with patch(
+        target="nonebot_plugin_dcqq_relay.utils.with_webhook_links",
+        new_callable=get_test_links,
+    ):
+        from nonebot_plugin_dcqq_relay import matcher
+
+        async with app.test_matcher(matcher) as ctx:
+            qq_bot, dc_bot = create_bot(ctx)
+            dc_bot.adapter.driver._bots[dc_bot.self_id] = dc_bot
+
+            ctx.receive_event(qq_bot, group_message_event())
+            ctx.should_pass_rule()
+
+            ctx.should_call_api(
+                api="execute_webhook",
+                data=execute_webhook_data(),
+                result=execute_webhook_result(),
+            )
+
+
+@pytest.mark.asyncio
+async def test_delete_qq_to_dc(app: App) -> None:
+    with patch(
+        target="nonebot_plugin_dcqq_relay.utils.with_webhook_links",
+        new_callable=get_test_links,
+    ):
+        from nonebot_plugin_dcqq_relay import matcher
+        from nonebot_plugin_dcqq_relay.model import MsgID
+
+        from nonebot_plugin_orm import get_session
+
+        async with app.test_matcher(matcher) as ctx:
+            qq_bot, dc_bot = create_bot(ctx)
+            dc_bot.adapter.driver._bots[dc_bot.self_id] = dc_bot
+
+            qq_msg_id = 12345
+            dc_msg_id = 987654321
+            async with get_session() as session:
+                session.add(MsgID(dcid=dc_msg_id, qqid=qq_msg_id))
+                await session.commit()
+
+            ctx.receive_event(qq_bot, group_recall_event(qq_msg_id, group_id=10001))
+            ctx.should_pass_rule()
+            ctx.should_call_api(
+                api="delete_message",
+                data={"channel_id": int("2" * 18), "message_id": dc_msg_id},
+                result=None,
+            )
+
+        async with get_session() as session:
+            with pytest.RaisesExc(InvalidRequestError):
+                await session.delete(MsgID(dcid=dc_msg_id, qqid=qq_msg_id))
+
+
+@pytest.mark.asyncio
+async def test_delete_dc_to_qq(app: App) -> None:
+    with patch(
+        target="nonebot_plugin_dcqq_relay.utils.with_webhook_links",
+        new_callable=get_test_links,
+    ):
+        from nonebot_plugin_dcqq_relay import matcher
+        from nonebot_plugin_dcqq_relay.model import MsgID
+
+        from nonebot_plugin_orm import get_session
+
+        async with app.test_matcher(matcher) as ctx:
+            _, dc_bot = create_bot(ctx)
+
+            dc_msg_id = int("1" * 18)
+            qq_msg_id = 54321
+            async with get_session() as session:
+                session.add(MsgID(dcid=dc_msg_id, qqid=qq_msg_id))
+                await session.commit()
+
+            ctx.receive_event(dc_bot, guild_message_delete_event(str(dc_msg_id)))
+            ctx.should_pass_rule()
+            ctx.should_call_api("delete_msg", {"message_id": qq_msg_id}, None)
+
+        with pytest.RaisesExc(InvalidRequestError):
+            async with get_session() as session:
+                await session.delete(MsgID(dcid=dc_msg_id, qqid=qq_msg_id))
 
 
 @pytest.mark.asyncio
@@ -19,7 +137,21 @@ async def test_handle_get_link_none(app: App) -> None:
         qq_bot, _ = create_bot(ctx)
 
         with pytest.RaisesExc(FinishedException):
-            await message_relay(qq_bot, qq_complex_event(), None)
+            await message_relay(qq_bot, group_message_event(), None)
+
+
+@pytest.mark.asyncio
+async def test_handle_type_not_match(app: App) -> None:
+    with patch(
+        "nonebot_plugin_dcqq_relay.utils.with_webhook_links",
+        new_callable=get_test_links,
+    ):
+        from nonebot_plugin_dcqq_relay import message_relay
+
+        async with app.test_matcher() as ctx:
+            qq_bot, _ = create_bot(ctx)
+
+            await message_relay(qq_bot, guild_message_create_event())
 
 
 @pytest.mark.asyncio
@@ -33,11 +165,11 @@ async def test_matcher_unmatch_beginning(app: App) -> None:
     )
     async with app.test_matcher(matcher) as ctx:
         qq_bot, _ = create_bot(ctx)
-        ctx.receive_event(qq_bot, qq_complex_event("/cmd"))
+        ctx.receive_event(qq_bot, group_message_event("/cmd"))
         ctx.should_not_pass_rule()
-        ctx.receive_event(qq_bot, qq_complex_event("!cmd"))
+        ctx.receive_event(qq_bot, group_message_event("!cmd"))
         ctx.should_not_pass_rule()
-        ctx.receive_event(qq_bot, qq_complex_event("cmd"))
+        ctx.receive_event(qq_bot, group_message_event("cmd"))
         ctx.should_pass_rule()
 
 
@@ -53,14 +185,14 @@ async def test_matcher_only_to_me(app: App) -> None:
     async with app.test_matcher(matcher) as ctx:
         qq_bot, dc_bot = create_bot(ctx)
 
-        ctx.receive_event(qq_bot, qq_complex_event())
+        ctx.receive_event(qq_bot, group_message_event())
         ctx.should_not_pass_rule()
-        ctx.receive_event(qq_bot, qq_complex_event(to_me=True))
+        ctx.receive_event(qq_bot, group_message_event(to_me=True))
         ctx.should_pass_rule()
 
-        ctx.receive_event(dc_bot, dc_complex_forward_event())
+        ctx.receive_event(dc_bot, guild_message_create_event())
         ctx.should_not_pass_rule()
-        ctx.receive_event(dc_bot, dc_complex_forward_event(to_me=True))
+        ctx.receive_event(dc_bot, guild_message_create_event(to_me=True))
         ctx.should_pass_rule()
 
         ctx.receive_event(qq_bot, group_recall_event())

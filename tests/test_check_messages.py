@@ -1,11 +1,11 @@
 from unittest.mock import patch
 
 from tests.data import (
-    dc_complex_forward_event,
     get_test_links,
+    group_message_event,
     group_recall_event,
+    guild_message_create_event,
     guild_message_delete_event,
-    qq_complex_event,
 )
 
 from nonebug import App
@@ -15,7 +15,7 @@ from nonebug import App
 def test_group_message_matched(app: App) -> None:
     from nonebot_plugin_dcqq_relay.utils import check_messages
 
-    event = qq_complex_event(group_id=10001)
+    event = group_message_event(group_id=10001)
     assert check_messages(event) is True
 
 
@@ -23,7 +23,7 @@ def test_group_message_matched(app: App) -> None:
 def test_group_message_group_id_not_in_links(app: App) -> None:
     from nonebot_plugin_dcqq_relay.utils import check_messages
 
-    event = qq_complex_event(group_id=99999)
+    event = group_message_event(group_id=99999)
     assert check_messages(event) is False
 
 
@@ -41,7 +41,7 @@ def test_group_recall_matched(app: App) -> None:
 def test_guild_create_matched(app: App) -> None:
     from nonebot_plugin_dcqq_relay.utils import check_messages
 
-    event = dc_complex_forward_event(webhook_id="2")
+    event = guild_message_create_event(webhook_id="2")
     assert check_messages(event) is True
 
 
@@ -51,7 +51,7 @@ def test_guild_create_matched(app: App) -> None:
 def test_guild_create_same_webhook_id(app: App) -> None:
     from nonebot_plugin_dcqq_relay.utils import check_messages
 
-    event = dc_complex_forward_event(webhook_id="1")
+    event = guild_message_create_event(webhook_id="1")
     assert check_messages(event) is False
 
 
@@ -61,7 +61,7 @@ def test_guild_create_same_webhook_id(app: App) -> None:
 def test_guild_create_guild_id_not_in_links(app: App) -> None:
     from nonebot_plugin_dcqq_relay.utils import check_messages
 
-    event = dc_complex_forward_event(guild_id="1")
+    event = guild_message_create_event(guild_id="1")
     assert check_messages(event) is False
 
 
@@ -71,7 +71,7 @@ def test_guild_create_guild_id_not_in_links(app: App) -> None:
 def test_guild_create_channel_id_not_in_links(app: App) -> None:
     from nonebot_plugin_dcqq_relay.utils import check_messages
 
-    event = dc_complex_forward_event(channel_id="1")
+    event = guild_message_create_event(channel_id="1")
     assert check_messages(event) is False
 
 
