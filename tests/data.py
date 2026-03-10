@@ -1,4 +1,6 @@
+from base64 import b64decode
 from typing import Any
+from zlib import decompress
 
 from nonebot.adapters.discord import (
     UNSET,
@@ -352,7 +354,7 @@ def guild_message_delete_event(
     )
 
 
-skil_b64 = (
+skil_bytes = b64decode(
     "AiMhU0lMS19WMxUApg9yWVnFJOjPwe3oi/vav8pxXlU/IACyQYXZ3oPIJFhBwnMHbV1Pmku8cuEWCUrUKr"
     + "JcbS72fykApwgewp9Im0li5Sr8EQOoR3XPbJE6RCP6yVjFqOtaXKZeldun6cGgP38pALf4ol5m6R+ua5"
     + "3axgjCN2zDib1f4miLWOqEynodaATkm/pxLEqCNcn/JAC1cYEn6mVmKgHYEexrI170LSu0c8HdjaLGec"
@@ -384,7 +386,7 @@ skil_b64 = (
     + "4xoyPko+SNOVNgUWU/P37vIgCwb9AiR245ZmWADpwYAu/rJj289edObwseXmLu3FoVzdx/JQClupjGNr"
     + "fUKaayO/zvaONXL7nEu60BL7HT9aASru4GxFcamHff"
 )
-amr_b64 = (
+amr_bytes = b64decode(
     "IyFBTVIKDB9Ub+B3bZWcmm4KKGAMzMeY+uqCzqCG3Snh8gx4iC8AavmYL7vgdgW8DPFNhsNk5F2W68uxP7"
     + "oMrdlKx2SiW7OLVR3D2gznOTt5mz2zuBNa5IxqDHiQsONtl4f9ZttpfwgM+kLOc2plXDzCeKBcWgwfiF"
     + "T7a8L2uGrChquGDDzM+M9PDwRQgxkC0I4MaULN++Z4CSHeZ7K2SgxpzmvfarmkPaYLK+BeDGmQCN/rhF"
@@ -398,4 +400,28 @@ amr_b64 = (
     + "S2i7YyXBQMa8xsb29F7qymM8UeFAzEO23ffcE22nklkaSoDA5nTvtnyMVVj2M2lewMxMyH+u6q1qPIYJ"
     + "g/qAws7JP95xnoHzr8RrwGDGKIhZt/nyePOgye41gMaewl3/j4VL+yhqkWJAwOiIR37sDqeE1X1084DM"
     + "SShq/vsmbXVFHyHNYMaWrLdLvs7W0svAJHJg=="
+)
+test_png_bytes = b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAEYAAAAaCAYAAAAKYioIAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQ"
+    + "UAAAAJcEhZcwAAFiUAABYlAUlSJPAAAAEcSURBVFhH7ZABCsMwDAP7/093eMxgTBxJSbtuTQ9MSSPLjr"
+    + "b9oQkdzLatlSH1WgvlCabBaqEYTzAFSwbDvOetMCFbd4B5B1TkQPyc659g9qWCOZorA2XnfjUYX8o983"
+    + "mE6MF4oXsHqlijHmjp3l0F8qyI+l4/dFUHZ3rDI8oc1tNwbVUV0L3XjEDDHVZnKNoW9JzPt2R2CdTPaC"
+    + "Iz+xhsP1TNLOKPRqUw0hNhe08P5gxmwrl1MMZoOLcPxhgJ52eCmelnUGf0tPEOOqqDM94/44FQvCtt3p"
+    + "FyzE0ZdG+4hikVpafS5v+0oy/tBvHs/65AnV9p83/5Rb6IsszRxB3UPVo9LD/rXdeBGkbGw4mV+ctgjq"
+    + "IKxVg6mJp9fwGt8jszqRET6QAAAABJRU5ErkJggg=="
+)
+test_mp4_bytes = decompress(
+    b64decode(
+        "eJx9Ul1IFFEU/sbVMOmP2khipbWUknDbXV1CemhDBaF9KxPaXu7Onc1hZ3aGuddBk0BFAl/MHiKin9"
+        + "cKoh6inoKM9snFIPLJQpIeCklYWiiDwLh3d93dLM+dw5nzc79z7jkHgD/JR2ydWSZQAyGJGwzpzA"
+        + "qbdmcIQH3S0TQA90xKeMMuAJ5Xv0d+5v2zs5mx8ITixYO1lvnsbIZ+4K9Xc5HW+K22q91Tn6fj2d"
+        + "Hl+YWm0ZNzk1Mxq39y+3jt3Tble/TT6gSs+KH80Fjz0oo3e/vOj54v/dT3/uPAUu7X9d79a3nj2N"
+        + "N3TyJvo3Wn9vZe881ZRxYGpk+nHp/oOPNi9fzzRZXsPm4fPvetZ/lGw9n7K/WA56BpWS4Aw3QHKa"
+        + "rI81WyAvGVqUrZrEexJdUANT3cISkAl3hK5vRsRhO5t87zr7zSNCPVFo1yBsCnGYyXbxRxZaDy0q"
+        + "Q6AeA36d9vF2hR9Gek0j5IDafkcXUqhrpBF3SqWX0kTQ1NxCiXTT2dBOB1TQlaWWYLLfh81NGELJ"
+        + "WyY8gx/IV/5SjjCQPAG8YZrYh5JrbrP60Qhhn0AZKl4UCMuGqkKxAJB0LBoN/QE8zlxC0hAI3r66"
+        + "IS4oa6x7ETpf0crsvJ/QTQkNQ1Q6bap1qGk1aNYWyTB8AemzC7WIpgb4I7xT7XPiwwGhmXMyiVrB"
+        + "S3w8c4U6vtZRzG2ZWi72bZploV8UEAiSHKxewumpqUgpor52RS3SG2LVq5Qe16YRlaH3FLADZRIi"
+        + "/LR8aIm4x0BTo6A6Fg6A/5MboX"
+    )
 )
