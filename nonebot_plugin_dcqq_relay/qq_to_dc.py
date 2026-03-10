@@ -193,7 +193,7 @@ class MessageBuilder:
             "xml": self.xml,
             "json": self.json,
             "rps": self.rps,
-            "dict": self.dice,
+            "dice": self.dice,
         }
 
     async def build(
