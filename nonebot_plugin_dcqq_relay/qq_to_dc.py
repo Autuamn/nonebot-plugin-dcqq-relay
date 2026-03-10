@@ -296,7 +296,7 @@ class MessageBuilder:
         qq = data.get("user_id") or data["qq"]
 
         if qq in ["0", "all"]:
-            return MsgResult(text="@everyone")
+            return MsgResult(text="@everyone", ensure=True)
 
         name = data.get("name")
         if not name:
