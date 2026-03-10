@@ -177,10 +177,10 @@ class MessageBuilder:
     def __init__(self):
         self._mapping = {
             "text": self.text,
+            "at": self.at,
             "face": self.face,
             "mface": self.mface,
             "marketface": self.marketface,
-            "at": self.at,
             "image": self.image,
             "record": self.record,
             "video": self.video,
@@ -192,6 +192,8 @@ class MessageBuilder:
             "forward": self.forward,
             "xml": self.xml,
             "json": self.json,
+            "rps": self.rps,
+            "dict": self.dice,
         }
 
     async def build(
@@ -389,6 +391,7 @@ class MessageBuilder:
                 if record_bytes
                 else None
             ),
+            ensure=not record_bytes,
         )
 
     async def video(
@@ -409,7 +412,7 @@ class MessageBuilder:
         if not content and (path := Path(url)) and await path.is_file():
             content = await path.read_bytes()
         if not content:
-            return MsgResult(text="[视频]")
+            return MsgResult(ensure=True, text="[视频]")
 
         filename = get_file_name(filename, content)
 
@@ -429,7 +432,7 @@ class MessageBuilder:
             file_info = await bot.call_api("get_file", file_id=file_id)
             content = await Path(file_info["file"]).read_bytes()
         else:
-            return MsgResult(text=f"[{filename}]")
+            return MsgResult(ensure=True, text=f"[{filename}]")
 
         return MsgResult(
             text=f"[{filename}]", file=File(content=content, filename=filename)
@@ -478,7 +481,7 @@ class MessageBuilder:
     ) -> MsgResult:
         return (
             MsgResult(ensure=True, text=f"[xml 消息]({seg.data})")
-            if len(seg) == 1
+            if len(event.message) == 1
             else MsgResult()
         )
 
@@ -487,7 +490,7 @@ class MessageBuilder:
     ) -> MsgResult:
         return (
             MsgResult(ensure=True, text=f"[json 消息]({seg.data})")
-            if len(seg) == 1
+            if len(event.message) == 1
             else MsgResult()
         )
 
