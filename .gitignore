@@ -3,6 +3,7 @@
 !/.devcontainer
 !/.github
 !/nonebot_plugin_dcqq_relay
+!/tests
 
 *.pyc
 
