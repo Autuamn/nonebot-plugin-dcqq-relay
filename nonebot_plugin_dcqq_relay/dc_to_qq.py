@@ -97,8 +97,15 @@ def save_file(file: bytes, file_name: str) -> Path:
 
 
 async def ensure_message(bot: dc_Bot, event: GuildMessageCreateEvent) -> dc_M:
-    attrs = ("attachments", "content", "embeds", "components", "sticker_items")
-    if not any(getattr(event, attr) for attr in attrs):
+    attrs = (
+        "attachments",
+        "content",
+        "embeds",
+        "components",
+        "sticker_items",
+        "message_snapshots",
+    )
+    if not any(hasattr(event, attr) for attr in attrs):
         message_get = await bot.get_channel_message(
             channel_id=event.channel_id, message_id=event.message_id
         )
@@ -110,12 +117,12 @@ async def ensure_message(bot: dc_Bot, event: GuildMessageCreateEvent) -> dc_M:
 def split_messages(messages: qq_M) -> tuple[list[qq_M], list[qq_M]]:
     combinable, videos, files = qq_M(), [], []
     for seg in messages:
-        if seg.type in ["text", "image", "reply", "record"]:
-            combinable.append(seg)
-        elif seg.type == "video":
+        if seg.type == "video":
             videos.append(qq_M(seg))
         elif seg.type == "file":
             files.append(qq_M(seg))
+        else:
+            combinable.append(seg)
     return [combinable, *videos], files
 
 
