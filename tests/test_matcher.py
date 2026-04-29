@@ -9,13 +9,14 @@ from tests.data import (
     group_recall_event,
     guild_message_create_event,
     guild_message_delete_event,
+    message_get,
     send_group_msg_data,
 )
 
 from nonebot.exception import FinishedException
 from nonebug import App
 import pytest
-from sqlalchemy.exc import InvalidRequestError
+from sqlalchemy import select
 
 
 @pytest.mark.asyncio
@@ -25,6 +26,9 @@ async def test_create_dc_to_qq(app: App) -> None:
         new_callable=get_test_links,
     ):
         from nonebot_plugin_dcqq_relay import matcher
+        from nonebot_plugin_dcqq_relay.model import MsgID
+
+        from nonebot_plugin_orm import get_session
 
         async with app.test_matcher(matcher) as ctx:
             _, dc_bot = create_bot(ctx)
@@ -39,7 +43,66 @@ async def test_create_dc_to_qq(app: App) -> None:
             ctx.should_call_api(
                 api="send_group_msg",
                 data=send_group_msg_data(),
+                result={"message_id": 2},
             )
+
+        async with get_session() as session:
+            msgids = await session.scalars(
+                select(MsgID).filter(MsgID.dcid == int("1" * 18))
+            )
+            count = 0
+            for msgid in msgids:
+                count += 1
+                await session.delete(msgid)
+            await session.commit()
+            assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_create_dc_to_qq_ensure_message(app: App) -> None:
+    with patch(
+        target="nonebot_plugin_dcqq_relay.utils.with_webhook_links",
+        new_callable=get_test_links,
+    ):
+        from nonebot_plugin_dcqq_relay import matcher
+        from nonebot_plugin_dcqq_relay.model import MsgID
+
+        from nonebot_plugin_orm import get_session
+
+        async with app.test_matcher(matcher) as ctx:
+            _, dc_bot = create_bot(ctx)
+
+            ctx.receive_event(dc_bot, guild_message_create_event(content=""))
+            ctx.should_pass_rule()
+            ctx.should_call_api(
+                api="get_channel_message",
+                data={
+                    "channel_id": int("2" * 18),
+                    "message_id": int("1" * 18),
+                },
+                result=message_get(),
+            )
+            ctx.should_call_api(
+                api="get_version_info",
+                data={},
+                result={"app_name": "other"},
+            )
+            ctx.should_call_api(
+                api="send_group_msg",
+                data=send_group_msg_data(),
+                result={"message_id": 2},
+            )
+
+        async with get_session() as session:
+            msgids = await session.scalars(
+                select(MsgID).filter(MsgID.dcid == int("1" * 18))
+            )
+            count = 0
+            for msgid in msgids:
+                count += 1
+                await session.delete(msgid)
+            await session.commit()
+            assert count == 1
 
 
 @pytest.mark.asyncio
@@ -51,6 +114,9 @@ async def test_create_qq_to_dc(
         new_callable=get_test_links,
     ):
         from nonebot_plugin_dcqq_relay import matcher
+        from nonebot_plugin_dcqq_relay.model import MsgID
+
+        from nonebot_plugin_orm import get_session
 
         async with app.test_matcher(matcher) as ctx:
             qq_bot, dc_bot = create_bot(ctx)
@@ -58,12 +124,20 @@ async def test_create_qq_to_dc(
 
             ctx.receive_event(qq_bot, group_message_event())
             ctx.should_pass_rule()
-
             ctx.should_call_api(
                 api="execute_webhook",
                 data=execute_webhook_data(),
                 result=execute_webhook_result(),
             )
+
+        async with get_session() as session:
+            msgids = await session.scalars(select(MsgID).filter(MsgID.dcid == 0))
+            count = 0
+            for msgid in msgids:
+                count += 1
+                await session.delete(msgid)
+            await session.commit()
+            assert count == 1
 
 
 @pytest.mark.asyncio
@@ -96,8 +170,15 @@ async def test_delete_qq_to_dc(app: App) -> None:
             )
 
         async with get_session() as session:
-            with pytest.RaisesExc(InvalidRequestError):
-                await session.delete(MsgID(dcid=dc_msg_id, qqid=qq_msg_id))
+            msgids = await session.scalars(
+                select(MsgID).filter(MsgID.dcid == dc_msg_id)
+            )
+            count = 0
+            for msgid in msgids:
+                count += 1
+                await session.delete(msgid)
+            await session.commit()
+            assert count == 0
 
 
 @pytest.mark.asyncio
@@ -124,9 +205,16 @@ async def test_delete_dc_to_qq(app: App) -> None:
             ctx.should_pass_rule()
             ctx.should_call_api("delete_msg", {"message_id": qq_msg_id}, None)
 
-        with pytest.RaisesExc(InvalidRequestError):
-            async with get_session() as session:
-                await session.delete(MsgID(dcid=dc_msg_id, qqid=qq_msg_id))
+        async with get_session() as session:
+            msgids = await session.scalars(
+                select(MsgID).filter(MsgID.dcid == dc_msg_id)
+            )
+            count = 0
+            for msgid in msgids:
+                count += 1
+                await session.delete(msgid)
+            await session.commit()
+            assert count == 0
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 from base64 import b64decode
+import datetime
 from typing import Any
 from zlib import decompress
 
@@ -15,8 +16,11 @@ from nonebot.adapters.discord.api import (
     GuildMember,
     GuildPreview,
     MessageGet,
+    MessageReference,
+    MessageSnapshot,
     Role,
     Snowflake,
+    StickerItem,
     User,
     Webhook,
 )
@@ -84,7 +88,75 @@ def user(
     )
 
 
-def message_get(channel_id: str = "2" * 18, content: str = "test") -> MessageGet:
+def message_snapshot(
+    content: str = "test",
+    url: str | None = None,
+    embed_title: str | None = None,
+    sticker_name: str | None = None,
+    timestamp: datetime.datetime = datetime.datetime.now(),
+) -> MessageSnapshot:
+    ms = type_validate_python(
+        MessageSnapshot,
+        {
+            "message": {
+                "type": 0,
+                "content": content,
+                "mentions": [],
+                "mention_roles": [],
+                "attachments": [],
+                "embeds": [],
+                "timestamp": timestamp.isoformat(),
+                "edited_timestamp": None,
+                "sticker_items": [],
+            }
+        },
+    )
+
+    if url:
+        ms.message.attachments.append(
+            type_validate_python(
+                Attachment,
+                {
+                    "id": "0",
+                    "filename": "test.png",
+                    "size": 391,
+                    "url": url,
+                    "proxy_url": url,
+                    "content_type": "image/png",
+                },
+            )
+        )
+    if embed_title:
+        ms.message.embeds.append(Embed(title=embed_title))
+    if sticker_name:
+        ms.message.sticker_items = [
+            (
+                type_validate_python(
+                    StickerItem,
+                    {
+                        "id": "0",
+                        "name": sticker_name,
+                        "format_type": 4,
+                    },
+                )
+            )
+        ]
+
+    return ms
+
+
+def message_reference(
+    message_id: str = "1", channel_id: str = "2", guild_id: str = "3"
+) -> MessageReference:
+    return type_validate_python(
+        MessageReference,
+        {"message_id": message_id, "channel_id": channel_id, "guild_id": guild_id},
+    )
+
+
+def message_get(
+    channel_id: str = "2" * 18, content: str = "test", id: str = "1" * 18
+) -> MessageGet:
     return type_validate_python(
         MessageGet,
         {
@@ -96,7 +168,7 @@ def message_get(channel_id: str = "2" * 18, content: str = "test") -> MessageGet
             "embeds": [],
             "timestamp": "2026-02-28T02:39:14.231000+00:00",
             "edited_timestamp": None,
-            "id": "1" * 18,
+            "id": id,
             "channel_id": channel_id,
             "author": user().model_dump(),
             "pinned": False,
@@ -112,13 +184,14 @@ def guild_message_create_event(
     webhook_id: str | None = None,
     to_me: bool = False,
     content: str = "test",
+    id: str = "1" * 18,
 ) -> GuildMessageCreateEvent:
     ev = type_validate_python(
         GuildMessageCreateEvent,
         {
             "to_me": to_me,
             "guild_id": guild_id,
-            **model_dump(message_get(channel_id, content)),
+            **model_dump(message_get(channel_id, content, id)),
         },
     )
     if webhook_id is not None:
