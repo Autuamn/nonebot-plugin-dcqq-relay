@@ -1,16 +1,24 @@
 import uuid
 
 from tests.conftest import create_bot
-from tests.data import amr_bytes, group_message_event, test_mp4_bytes, test_png_bytes
+from tests.data import (
+    amr_bytes,
+    get_test_links,
+    group_message_event,
+    test_mp4_bytes,
+    test_png_bytes,
+)
 
 from anyio import Path
 from nonebot.adapters.onebot.v11 import (
     Message as QQMessage,
     MessageSegment as QQMessageSegment,
 )
+from nonebot.adapters.onebot.v11.event import Reply, Sender
 from nonebug import App
 import pytest
 from pytest_httpserver import HTTPServer
+from sqlalchemy import select
 
 
 @pytest.mark.asyncio
@@ -31,6 +39,73 @@ async def test_extract_plain_text(app: App) -> None:
 
     msg_res = [MsgResult(text="a"), MsgResult(text="b")]
     assert MessageBuilder().extract_plain_text(msg_res) == "ab"
+
+
+@pytest.mark.asyncio
+async def test_handle_reply(app: App) -> None:
+    from nonebot_plugin_dcqq_relay.config import LinkWithWebhook
+    from nonebot_plugin_dcqq_relay.model import MsgID
+    from nonebot_plugin_dcqq_relay.qq_to_dc import MessageBuilder
+
+    from nonebot_plugin_orm import get_session
+
+    async with app.test_api() as ctx:
+        bot, _ = create_bot(ctx)
+        builder = MessageBuilder()
+        link: LinkWithWebhook = get_test_links()[0]
+
+        time = 0
+        qq_msg_id = 0
+        sender_id = 00
+        sender_name = "test"
+        message = "test"
+
+        reply = Reply(
+            time=time,
+            message_type="",
+            message_id=qq_msg_id,
+            real_id=0,
+            sender=Sender(user_id=sender_id, nickname=sender_name),
+            message=QQMessage(message),
+        )
+
+        result = await builder.handle_reply(reply, bot, link)
+        assert result.author
+        assert result.author.name == f"{sender_name}[QQ:{sender_id}]"
+        assert result.description == f"{message}\n\n<t:{time}:R>[ ? ]"
+
+        dc_sender = "Test(@test)"
+        reply.sender = Sender(user_id=10001)
+        reply.message = QQMessage(dc_sender + ":\n\n" + message)
+        result = await builder.handle_reply(reply, bot, link)
+        assert result.author
+        assert result.author.name == dc_sender
+        assert result.description == f"{message}\n\n<t:{time}:R>[ ? ]"
+
+        dc_msg_id = 1
+        async with get_session() as session:
+            session.add(MsgID(dcid=dc_msg_id, qqid=qq_msg_id))
+            await session.commit()
+
+        result = await builder.handle_reply(reply, bot, link)
+
+        async with get_session() as session:
+            msgids = await session.scalars(
+                select(MsgID).filter(MsgID.dcid == dc_msg_id)
+            )
+            count = 0
+            for msgid in msgids:
+                count += 1
+                await session.delete(msgid)
+            await session.commit()
+            assert count == 1
+
+        assert result.author
+        assert result.author.name == dc_sender
+        assert (
+            result.description
+            == f"{message}\n\n<t:{time}:R>[[ ↑ ]](https://discord.com/channels/{link.dc_guild_id}/{link.dc_channel_id}/{dc_msg_id})"
+        )
 
 
 @pytest.mark.asyncio

@@ -46,10 +46,7 @@ async def after_nonebot_init(after_nonebot_init: None):
 def create_bot(ctx: ApiContext) -> tuple[QQBot, DCBot]:
     dc_adapter = nonebot.get_adapter(DCAdapter)
     qq_adapter = nonebot.get_adapter(QQAdapter)
-    qq_bot = ctx.create_bot(
-        base=QQBot,
-        adapter=qq_adapter,
-    )
+    qq_bot = ctx.create_bot(base=QQBot, adapter=qq_adapter, self_id="10001")
     dc_bot: DCBot = ctx.create_bot(
         base=DCBot,
         adapter=dc_adapter,
