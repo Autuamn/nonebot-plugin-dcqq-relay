@@ -8,24 +8,27 @@ on:
 
 jobs:
   test:
-    name: Test Coverage
+    name: Test Coverage (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.db_type }})
     runs-on: ${{ matrix.os }}
     concurrency:
-      group: test-coverage-${{ github.ref }}-${{ matrix.os }}-${{ matrix.python-version }}-${{ startsWith(matrix.db, 'postgresql') && 'postgres' || startsWith(matrix.db, 'mysql') && 'mysql' || 'sqlite' }}
+      group: test-coverage-${{ github.ref }}-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.db_type }}
       cancel-in-progress: true
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         db: ["sqlite+aiosqlite:///db.sqlite3"]
+        db_type: ["sqlite"]
 
         include:
           - os: ubuntu-latest
             python-version: "3.14"
             db: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+            db_type: "postgresql"
           - os: ubuntu-latest
             python-version: "3.14"
             db: mysql+aiomysql://mysql:mysql@localhost:3306/mymysql
+            db_type: "mysql"
       fail-fast: false
     env:
       OS: ${{ matrix.os }}
@@ -56,8 +59,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup FFmpeg
-        uses: federicocarboni/setup-ffmpeg@v3.1
+      - name: Setup FFmpeg (Intel macOS / Linux / Windows)
+        uses: federicocarboni/setup-ffmpeg@v3
+        if: runner.os != 'macOS' || runner.arch != 'ARM64'
+
+      - name: Install FFmpeg on macOS ARM64
+        run: brew install ffmpeg
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -79,7 +87,7 @@ jobs:
         if: startsWith(matrix.db, 'postgresql')
 
       - name: Install MySQL Dependencies
-        run: uv pip install nonebot-plugin-orm[mysql]
+        run: uv pip install nonebot-plugin-orm[mysql] cryptography
         if: startsWith(matrix.db, 'mysql')
 
       - name: Run Pytest
