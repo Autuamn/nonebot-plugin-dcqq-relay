@@ -96,7 +96,9 @@ def save_file(file: bytes, file_name: str) -> Path:
     return file_path
 
 
-async def ensure_message(bot: dc_Bot, event: GuildMessageCreateEvent) -> dc_M:
+async def ensure_message(
+    bot: dc_Bot, event: GuildMessageCreateEvent
+) -> GuildMessageCreateEvent:
     attrs = (
         "attachments",
         "content",
@@ -105,13 +107,13 @@ async def ensure_message(bot: dc_Bot, event: GuildMessageCreateEvent) -> dc_M:
         "sticker_items",
         "message_snapshots",
     )
-    if not any(hasattr(event, attr) for attr in attrs):
+    if not any(getattr(event, attr) for attr in attrs):
         message_get = await bot.get_channel_message(
             channel_id=event.channel_id, message_id=event.message_id
         )
         for attr in attrs:
             setattr(event, attr, getattr(message_get, attr))
-    return event.get_message()
+    return event
 
 
 def split_messages(messages: qq_M) -> tuple[list[qq_M], list[qq_M]]:
@@ -161,7 +163,8 @@ async def create_dc_to_qq(
         if isinstance(bot, qq_Bot)
         and ((self_id == link.qq_bot_id) if link.qq_bot_id else True)
     )
-    seg_msg = await ensure_message(bot, event)
+    event = await ensure_message(bot, event)
+    seg_msg = dc_M.from_guild_message(event)
 
     messages = await MessageBuilder().build(seg_msg, bot, event)
     msg_to_send, files = split_messages(messages)
