@@ -43,6 +43,20 @@ async def after_nonebot_init(after_nonebot_init: None):
     nonebot.load_plugin("nonebot_plugin_dcqq_relay")
 
 
+@pytest.fixture(autouse=True)
+async def reset_orm_engine():
+    from nonebot_plugin_orm import _engines, init_orm
+
+    engine = _engines[""]
+    if engine is not None:
+        await engine.dispose()
+    await init_orm()
+    yield
+    engine = _engines[""]
+    if engine is not None:
+        await engine.dispose()
+
+
 def create_bot(ctx: ApiContext) -> tuple[QQBot, DCBot]:
     dc_adapter = nonebot.get_adapter(DCAdapter)
     qq_adapter = nonebot.get_adapter(QQAdapter)
