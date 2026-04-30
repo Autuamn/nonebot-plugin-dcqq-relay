@@ -206,7 +206,7 @@ def skil_to_ogg(origi_bytes: bytes) -> bytes:
         audio = AudioSegment.from_file(BytesIO(pcm_bytes), format="wav")
     else:
         audio = AudioSegment.from_file(BytesIO(origi_bytes), format=ft_match.extension)
-    audio.export(output_buffer, format="ogg")
+    audio.export(output_buffer, format="ogg", codec="libopus")
 
     output_buffer.seek(0)
     return output_buffer.read()
