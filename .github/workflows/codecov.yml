@@ -1,0 +1,103 @@
+name: Code Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: Test Coverage (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.db_type }})
+    runs-on: ${{ matrix.os }}
+    concurrency:
+      group: test-coverage-${{ github.ref }}-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.db_type }}
+      cancel-in-progress: true
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        db: ["sqlite+aiosqlite:///db.sqlite3"]
+        db_type: ["sqlite"]
+
+        include:
+          - os: ubuntu-latest
+            python-version: "3.14"
+            db: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+            db_type: "postgresql"
+          - os: ubuntu-latest
+            python-version: "3.14"
+            db: mysql+aiomysql://mysql:mysql@localhost:3306/mymysql
+            db_type: "mysql"
+      fail-fast: false
+    env:
+      OS: ${{ matrix.os }}
+      PYTHON_VERSION: ${{ matrix.python-version }}
+      SQLALCHEMY_DATABASE_URL: ${{ matrix.db }}
+
+    services:
+      postgresql:
+        image: ${{ startsWith(matrix.db, 'postgresql') && 'postgres' || '' }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+
+      mysql:
+        image: ${{ startsWith(matrix.db, 'mysql') && 'mysql' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+          MYSQL_USER: mysql
+          MYSQL_PASSWORD: mysql
+          MYSQL_DATABASE: mymysql
+        ports:
+          - 3306:3306
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup FFmpeg (Intel macOS / Linux / Windows)
+        uses: federicocarboni/setup-ffmpeg@v3
+        if: runner.os != 'macOS' || runner.arch != 'ARM64'
+
+      - name: Install FFmpeg on macOS ARM64
+        run: brew install ffmpeg
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Sync Dependencies
+        run: |
+          uv python pin ${{ env.PYTHON_VERSION }}
+          uv sync --group test
+
+      - name: Install PostgreSQL Dependencies
+        run: uv pip install nonebot-plugin-orm[postgresql]
+        if: startsWith(matrix.db, 'postgresql')
+
+      - name: Install MySQL Dependencies
+        run: uv pip install nonebot-plugin-orm[mysql] cryptography
+        if: startsWith(matrix.db, 'mysql')
+
+      - name: Run Pytest
+        run: uv run pytest --cov --cov-branch --cov-report=xml
+
+      - name: Upload Coverage Reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          env_vars: OS,PYTHON_VERSION,SQLALCHEMY_DATABASE_URL
+          files: ./coverage.xml
+          flags: unittests
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
