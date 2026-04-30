@@ -14,7 +14,7 @@ dependencies = [
     "filetype>=1.2.0,<2.0.0",
     "pydub>=0.25.1,<0.26.0",
     "pysilk-mod>=1.6.4,<2.0.0",
-    "nonebot-plugin-localstore>=0.7.4,<0.8.0",
+    "nonebot-plugin-lOCALSTORE>=0.7.4,<0.8.0",
     "audioop-lts; python_version >= '3.13' and python_version < '4.0'",
 ]
 
@@ -27,7 +27,7 @@ dev = [
 ]
 test = [
     "nonebug>=0.4.0,<0.5.0",
-    "pytest>=7.0.0,<10.0.0",
+    "pytest>=9.0.0,<10.0.0",
     "pytest-asyncio>=1.1.0,<2.0.0",
     "pytest-cov>=7.0.0",
     "pytest-httpserver>=1.0.0",
