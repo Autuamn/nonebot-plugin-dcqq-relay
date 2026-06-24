@@ -69,15 +69,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup FFmpeg (Intel macOS / Linux / Windows)
-        uses: Wandalen/wretry.action@v3.8.0
-        with:
-          action: federicocarboni/setup-ffmpeg@v3
-        if: runner.os != 'macOS' || runner.arch != 'ARM64'
-
-      - name: Install FFmpeg on macOS ARM64
-        run: brew install ffmpeg
-        if: runner.os == 'macOS' && runner.arch == 'ARM64'
+      - name: Setup FFmpeg
+        uses: AnimMouse/setup-ffmpeg@v1
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
